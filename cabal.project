@@ -1,0 +1,7 @@
+packages: ./
+
+source-repository-package 
+  type: git 
+  location: https://github.com/andrewthad/quantification
+  tag: 73ab55c32673a192b2dfd78dbf17c5cda1372624
+
