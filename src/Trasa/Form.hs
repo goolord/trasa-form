@@ -9,27 +9,46 @@
 {-# language DataKinds #-}
 {-# language GADTs #-}
 {-# language ScopedTypeVariables #-}
+{-# language LambdaCase #-}
 
 module Trasa.Form where
 
+import Control.Applicative
 import Control.Arrow ((&&&))
+import Control.Monad
+import Control.Monad.Reader
+import Control.Monad.State
+import Control.Monad.Error
+import Data.CaseInsensitive
 import Data.Foldable (traverse_)
 import Data.Functor.Identity
 import Data.Kind (Type)
+import Data.Proxy
 import Data.Text (Text)
 import Data.Time
 import GHC.Generics hiding (Meta)
 import Lucid
+import System.Random
 import Text.Reform.Backend
 import Text.Reform.Core
-import qualified Text.Reform.Generalized as G
-import Text.Reform.Result      (FormId, Result(Ok), unitRange)
+import Text.Reform.Result (FormId, Result(..), unitRange, FormRange(..))
 import Topaz.Rec ((<:))
-import Trasa.Core
-import qualified Text.Read
-import qualified Data.Map.Strict as Map
+import Trasa.Core hiding (optional)
+import Trasa.Server
+import qualified Network.HTTP.Types as HTTP
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Builder as BB
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Char8 as BC8
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Read as TR
+import qualified Text.Read
+import qualified Text.Reform.Generalized as G
 import qualified Trasa.Method as M
+import qualified Web.Cookie as Cookie
 
 foo :: Meta capCodec qryCodec reqCodec respCodec caps qrys req resp 
   -> Arguments caps qrys req (Field a)
@@ -122,7 +141,13 @@ form action hidden children = do
   mkHidden (name, value) = input_ [type_ "hidden", name_ name, value_ value]
 
 class IsRoute route where
-  encodeRoute :: Prepared route response -> Text
+  routeMeta :: Prepared route response -> Meta CaptureEncoding CaptureEncoding reqCodec respCodec caps qrys req resp
+
+link :: IsRoute route => Prepared route response -> Url
+link rt = linkWith (const (routeMeta rt)) rt
+
+encodeRoute :: IsRoute route => Prepared route response -> Text
+encodeRoute = encodeUrl . link
 
 instance FormError Text where
   type ErrorInputType Text = Text
@@ -135,9 +160,9 @@ readMay :: Read a => Text -> Maybe a
 readMay = Text.Read.readMaybe . T.unpack
 
 readInt :: Text -> Either Text Int
-readInt input = case readMay input of
-  Just int -> Right int
-  Nothing -> Left "Not a number"
+readInt input = case TR.decimal input of
+  Left err -> Left $ T.pack err
+  Right (int, _) -> Right int
 
 label :: (Monad m, Monad f) =>
      HtmlT f ()
@@ -159,3 +184,107 @@ formFoo = Foo
 --   -> Maybe ([(FormRange, error)] -> view -> m b) -- ^ failure handler used when form does not validate
 --   -> Form m [Input] error view proof a           -- ^ the formlet
 --   -> m view
+reform :: (Monoid view) =>
+            ([(Text, Text)] -> view -> view)            -- ^ wrap raw form html inside a @\<form\>@ tag
+         -> Text                                        -- ^ prefix
+         -> (a -> TrasaT IO b)                                  -- ^ success handler used when form validates
+         -> Maybe ([(FormRange, error)] -> view -> TrasaT IO b) -- ^ failure handler used when form does not validate
+         -> Form (TrasaT IO) [Text] error view proof a           -- ^ the formlet
+         -> TrasaT IO view
+reform toForm prefix success failure form =
+    guard prefix (reformSingle toForm' (TL.fromStrict prefix) success failure form)
+  where
+  toForm' hidden view = toForm (("formname",prefix) : hidden) view
+  guard :: (MonadPlus m) => Text -> m a -> m a
+  guard formName part = ( do 
+    undefined
+    -- method POST
+    -- submittedName <- getDataFn (lookText "formname")
+    -- if (submittedName == (Right formName))
+    -- then part
+    -- else localRq (\req -> req { rqMethod = GET }) part
+    ) `mplus` part
+
+reformSingle :: (MonadPlus m, Alternative m, Monoid view) =>
+                  ([(Text, Text)] -> view -> view)            -- ^ wrap raw form html inside a <form> tag
+               -> TL.Text                                      -- ^ prefix
+               -> (a -> m b)                                  -- ^ handler used when form validates
+               -> Maybe ([(FormRange, error)] -> view -> m b) -- ^ handler used when form does not validate
+               -> Form (TrasaT IO) [Text] error view proof a           -- ^ the formlet
+               -> TrasaT IO view
+reformSingle toForm prefix handleSuccess mHandleFailure form =
+    msum [ do csrfToken <- addCSRFCookie (T.encodeUtf8 csrfName)
+              toForm [(csrfName, csrfToken)] <$> viewForm prefix form
+
+         , do checkCSRF csrfName
+              undefined
+           --    (v, mresult) <- runForm environment prefix form
+           --    result <- mresult
+           --    case result of
+           --      (Ok a)         ->
+           --          (escape . fmap toResponse) $ do -- expireCookie csrfName
+           --                                          handleSuccess (unProved a)
+           --      (Error errors) ->
+           --          do csrfToken <- addCSRFCookie csrfName
+           --             case mHandleFailure of
+           --               (Just handleFailure) ->
+           --                   (escape . fmap toResponse) $
+           --                     handleFailure errors (toForm [(csrfName, csrfToken)] (unView v errors))
+           --               Nothing ->
+           --                   pure $ toForm [(csrfName, csrfToken)] (unView v errors)
+         ]
+
+csrfName :: Text
+csrfName = "reform-csrf"
+
+-- | Utility Function: add a cookie for CSRF protection
+addCSRFCookie :: BS.ByteString    -- ^ name to use for the cookie
+  -> TrasaT IO Text
+addCSRFCookie name = do
+  mc <- lookupCookie name
+  case mc of
+    Nothing -> do 
+      i :: Integer <- liftIO randomIO
+      setCookie $ Cookie.defaultSetCookie
+        { Cookie.setCookieName = name
+        , Cookie.setCookieValue = BC8.pack $ show i
+        , Cookie.setCookieHttpOnly = True 
+        , Cookie.setCookieExpires = Nothing
+        }
+      pure $ tshow i
+    Just c -> pure $ T.decodeUtf8 c
+
+getHeader :: CI BS.ByteString -> TrasaT IO (Maybe T.Text)
+getHeader idt = fmap (M.lookup idt) ask
+
+currentHeader :: CI BS.ByteString -> TrasaT IO (Maybe T.Text)
+currentHeader idt = fmap (M.lookup idt) get
+
+setHeader :: CI BS.ByteString -> T.Text -> TrasaT IO ()
+setHeader idt header = modify (M.insert idt header)
+
+getCookies :: TrasaT IO (Maybe Cookie.Cookies)
+getCookies = getHeader "Cookie" >>= \case
+  Nothing -> pure Nothing
+  Just rawCookie -> pure $ Just $ Cookie.parseCookies $ T.encodeUtf8 rawCookie
+
+lookupCookie :: BS.ByteString -> TrasaT IO (Maybe BS.ByteString)
+lookupCookie name = do
+  getCookies >>= \case 
+    Nothing -> pure Nothing
+    Just cookies -> pure $ lookup name cookies
+
+setCookie :: Cookie.SetCookie -> TrasaT IO ()
+setCookie cookie = do
+  let cookie' :: Text
+      cookie' = T.decodeUtf8 $ BL.toStrict $ BB.toLazyByteString $ Cookie.renderSetCookie cookie
+  setHeader "Set-Cookie" cookie'
+
+checkCSRF :: Text -> TrasaT IO ()
+checkCSRF name = do
+  mc <- getCSRFCookie name
+  mi <- lookText (TL.unpack name)
+  case (mc, mi) of
+    (Just c, Just c')
+        | c == c' -> pure ()
+    _ -> throwError (TrasaErr HTTP.status403 "CSRF check failed.")

@@ -5,3 +5,8 @@ source-repository-package
   location: https://github.com/andrewthad/quantification
   tag: 73ab55c32673a192b2dfd78dbf17c5cda1372624
 
+source-repository-package
+  type: git
+  location: https://github.com/haskell-trasa/trasa
+  tag: 8e896eaf086116e4609750edb5040acc453b9f40
+  subdir: trasa-server
