@@ -29,6 +29,7 @@ library
     , random
     , case-insensitive
     , containers
+    , unordered-containers
     , cookie
     , email-validate
     , lucid
@@ -44,3 +45,20 @@ library
     , http-types
   hs-source-dirs:      src
   default-language:    Haskell2010
+executable test-server
+  -- ghc-options: -Wall -Werror
+  main-is: Main.hs
+  build-depends: base ^>=4.12.0.0
+    , trasa
+    , trasa-server
+    , quantification
+    , bytestring
+    , wai
+    , wai-extra
+    , warp
+    , text
+    , reform
+    , trasa-form
+    , lucid
+  hs-source-dirs: app
+  default-language: Haskell2010

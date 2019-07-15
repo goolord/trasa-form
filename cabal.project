@@ -7,6 +7,6 @@ source-repository-package
 
 source-repository-package
   type: git
-  location: https://github.com/haskell-trasa/trasa
-  tag: 8e896eaf086116e4609750edb5040acc453b9f40
+  location: https://github.com/goolord/trasa
+  tag: 7e5c9b6397819af4d9907c40d16b7f5c652edfd4
   subdir: trasa-server

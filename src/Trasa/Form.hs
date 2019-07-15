@@ -33,6 +33,8 @@ import Text.Reform.Result
 -- import Topaz.Rec ((<:))
 import Trasa.Core hiding (optional)
 import Trasa.Server
+import Trasa.Url
+import qualified Data.HashMap.Strict as HM
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Char8 as BC8
@@ -53,21 +55,30 @@ import qualified Web.Cookie as Cookie
 tshow :: Show a => a -> Text
 tshow = T.pack . show
 
-inputText :: (Monad m, FormError error, Applicative f) =>
-             (input -> Either error Text)
-          -> Text
-          -> Form m input error (HtmlT f ()) () Text
+inputText :: (Monad m, FormError err, Applicative f) 
+  => (input -> Either err Text)
+  -> Text
+  -> Form m input err (HtmlT f ()) () Text
 inputText getInput initialValue = G.input getInput inputField initialValue
   where
   inputField i a = input_ [type_ "text", id_ (tshow i), name_ (tshow i), value_ a]
 
-inputInt :: (Monad m, FormError error, Applicative f) =>
-             (input -> Either error Int)
-          -> Int
-          -> Form m input error (HtmlT f ()) () Int
+inputInt :: (Monad m, FormError err, Applicative f)
+  => (input -> Either err Int)
+  -> Int
+  -> Form m input err (HtmlT f ()) () Int
 inputInt getInput initialValue = G.input getInput inputField initialValue
   where
-  inputField i a = input_ [type_ "text", id_ (tshow i), name_ (tshow i), value_ (tshow a)]
+  inputField i a = input_ [type_ "number", id_ (tshow i), name_ (tshow i), value_ (tshow a)]
+
+buttonSubmit :: (Monad m, FormError err, Monad f, ToHtml children) 
+  => (input -> Either err Text)
+  -> Text
+  -> children
+  -> Form m input err (HtmlT f ()) () (Maybe Text)
+buttonSubmit getInput text c = G.inputMaybe getInput inputField text
+  where
+  inputField i a = button_ [type_ "submit", id_ (tshow i), name_ (tshow i), value_ (tshow a)] $ toHtml c
 
 -- | create @\<form action=action method=\"POST\" enctype=\"multipart/form-data\"\>@
 formGen :: (Applicative m)
@@ -76,7 +87,7 @@ formGen :: (Applicative m)
   -> HtmlT m b
   -> HtmlT m b
 formGen action hidden children = do 
-  form_ [action_ (encodeUrl action), method_ "POST", enctype_ "multipart/form-data"] $
+  form_ [action_ (encodeUrl action), method_ "GET", enctype_ "multipart/form-data"] $
        traverse_ mkHidden hidden
     *> children
   where
@@ -99,7 +110,7 @@ readInt input = case TR.decimal input of
 
 label :: (Monad m, Monad f) =>
      HtmlT f ()
-  -> Form m input error (HtmlT f ()) () ()
+  -> Form m input err (HtmlT f ()) () ()
 label c = G.label mkLabel
   where
   mkLabel i = label_ [for_ $ tshow i] c
@@ -111,7 +122,7 @@ formFoo = Foo
   <*> label "Int Field 1" ++> inputInt readInt 0
 
 getHeader :: CI BS.ByteString -> TrasaT IO (Maybe T.Text)
-getHeader idt = fmap (M.lookup idt) ask
+getHeader idt = fmap (M.lookup idt . trasaHeaders) ask
 
 currentHeader :: CI BS.ByteString -> TrasaT IO (Maybe T.Text)
 currentHeader idt = fmap (M.lookup idt) get
@@ -136,36 +147,52 @@ setCookie cookie = do
       cookie' = T.decodeUtf8 $ BL.toStrict $ BB.toLazyByteString $ Cookie.renderSetCookie cookie
   setHeader "Set-Cookie" cookie'
 
-simpleReform :: (Monad m, Alternative m, Applicative f) => Url -> Form (TrasaT m) (Rec Identity caps) error (HtmlT f ()) proof b -> TrasaT m (HtmlT f ())
-simpleReform action = reform (formGen action) "reform-prefix" (const (pure ())) Nothing
+simpleReform :: (MonadIO m, Show b, Applicative f) => Url -> Form (TrasaT m) Text err (HtmlT f ()) proof b -> TrasaT m (HtmlT f ())
+simpleReform action = reform (formGen action) "reform" (\x -> liftIO $ print x) Nothing
 
-reform :: (MonadPlus m, Alternative m, Monoid view)  
+reform :: (MonadIO m, Monoid view)  
   => ([(Text, Text)] -> view -> view)  -- wrap raw form html inside a <form> tag
   -> Text -- Prefix
-  -> (a -> m b) -- success handler used when form validates
-  -> Maybe ([(FormRange, error)] -> view -> m b)  -- failure handler used when form does not validate
-  -> Form m (Rec Identity caps) error view proof a  -- the formlet
-  -> m view
+  -> (a -> TrasaT m b) -- success handler used when form validates
+  -> Maybe ([(FormRange, err)] -> view -> TrasaT m b)  -- failure handler used when form does not validate
+  -> Form (TrasaT m) Text err view proof a  -- the formlet
+  -> TrasaT m view
 reform toForm prefix handleSuccess handleFailure formlet = do 
   tguard prefix (reformSingle toForm' prefix handleSuccess handleFailure formlet)
   where
   toForm' hidden view = toForm (("formname",prefix) : hidden) view
-  tguard :: (MonadPlus m) => Text -> m a -> m a
-  tguard formName part =
-    part `mplus` part
+  tguard :: (Monad m) => Text -> m a -> m a
+  tguard formName part = part
 
-reformSingle :: (Monad m, Monoid view)
+reformSingle :: (MonadIO m, Monoid view)
   => ([(Text, Text)] -> view -> view)
   -> Text
-  -> (a -> m b)
-  -> Maybe ([(FormRange, error)] -> view -> m b)
-  -> Form m (Rec Identity caps) error view proof a
-  -> m view
-reformSingle toForm prefix handleSuccess mhandleFailure formlet = do
-  (View viewf, res') <- runForm NoEnvironment (TL.fromStrict prefix) formlet
+  -> (a -> TrasaT m b)
+  -> Maybe ([(FormRange, err)] -> view -> TrasaT m b)
+  -> Form (TrasaT m) Text err view proof a
+  -> TrasaT m view
+reformSingle toForm prefix handleSuccess mHandleFailure formlet = do
+  (View viewf, res') <- runForm (Environment env) (TL.fromStrict prefix) formlet
   res <- res'
   case res of
-    Error err -> undefined
+    Error errs -> case mHandleFailure of
+      Just handleFailure -> do
+        handleFailure errs (toForm [] (viewf errs))
+        pure $ toForm [] $ viewf errs
+      Nothing -> pure $ toForm [] $ viewf errs
     Ok (Proved proofs pos unProved) -> do
       handleSuccess unProved
       pure $ toForm [] $ viewf []
+  where
+  env :: MonadIO m => FormId -> TrasaT m (Value Text)
+  env formId = do
+    QueryString queryString <- getQueryString
+    let val = HM.lookup (tshow formId) queryString
+    case val of
+      Nothing -> pure Missing
+      Just QueryParamFlag -> pure Default
+      Just (QueryParamSingle x) -> pure (Found x)
+      Just (QueryParamList x) -> pure (Found $ T.intercalate ", " x) -- ???
+
+getQueryString :: MonadIO m => TrasaT m QueryString
+getQueryString = trasaQueryString <$> ask
