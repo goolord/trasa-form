@@ -21,6 +21,7 @@ import Text.Reform.Core hiding (view)
 import Trasa.Server
 import Trasa.Form
 import Lucid
+import Text.Reform (Result(..))
 import Data.Text (Text)
 import qualified Control.Applicative
 import qualified Text.Read
@@ -29,7 +30,7 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as B
 import qualified Trasa.Method as Method
 
-data FooB = FooB Text Int Text Int
+data FooB = FooB Int Int
   deriving Show
 
 -- Our route data type. We define this ourselves.
@@ -113,10 +114,8 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
 
 formFooB :: Monad f => Form (TrasaT IO) Text Text (HtmlT f ()) () FooB
 formFooB = FooB 
-  <$> label "Text Field 1" ++> inputText Right ""
-  <*> label "Int Field 1" ++> inputInt readInt 0
-  <*> label "Text Field 2" ++> inputText Right ""
-  <*> label "Int Field 2" ++> inputInt readInt 0
+  <$> childErrors ++> label "Int Field 1" ++> inputInt readInt 0
+  <*> childErrors ++> label "Int Field 2" ++> inputInt readInt 0
   <*  buttonSubmit (const (Right mempty)) "" ("Submit" :: Text)
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
@@ -126,17 +125,21 @@ link :: Prepared Route response -> Url
 link = (linkWith (mapMeta captureEncoding captureEncoding id id . meta))
 
 formTest :: Maybe Text -> Maybe Int -> Maybe Text -> Maybe Int -> TrasaT IO (Html ())
-formTest mt1 mi1 mt2 mi2 = defaultLayout $ do
-  simpleReform (link (prepare FormTest Nothing Nothing Nothing Nothing)) formFooB :: TrasaT IO (Html ())
+formTest mt1 mi1 mt2 mi2 = do
+  (res, html) <- simpleReform (link (prepare FormTest Nothing Nothing Nothing Nothing)) formFooB
+  defaultLayout $ do
+    case res of
+      Ok x -> toHtml $ show x
+      Error _ -> mempty
+    html
 
-defaultLayout :: TrasaT IO (Html ()) -> TrasaT IO (Html ())
+defaultLayout :: Html () -> TrasaT IO (Html ())
 defaultLayout children = do
-  children' <- children
   pure $ html_ $ do
     head_ $ do
       link_ [rel_ "stylesheet", href_ "https://unpkg.com/sakura.css/css/sakura.css", type_ "text/css"]
     body_ $ do
-      children'
+      children
 
 -- | We define a list of all the routes for our server for wai
 allRoutes :: [Constructed Route]
