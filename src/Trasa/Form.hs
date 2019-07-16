@@ -1,15 +1,6 @@
 {-# language ConstraintKinds #-}
-{-# language RecordWildCards #-}
-{-# language ExplicitForAll #-}
-{-# language GeneralizedNewtypeDeriving #-}
 {-# language OverloadedStrings #-}
-{-# language QuasiQuotes #-}
 {-# language TypeFamilies #-}
-{-# language TypeOperators #-}
-{-# language DataKinds #-}
-{-# language GADTs #-}
-{-# language ScopedTypeVariables #-}
-{-# language LambdaCase #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -52,11 +43,9 @@ reform :: (MonadIO m, Monoid view)
   -> Form (TrasaT m) Text err view proof a  -- ^ the formlet
   -> TrasaT m (Result err a, view)
 reform toForm prefix formlet = do 
-  tguard prefix (reformSingle toForm' prefix formlet)
+  reformSingle toForm' prefix formlet
   where
   toForm' hidden view = toForm (("formname",prefix) : hidden) view
-  tguard :: (Monad m) => Text -> m a -> m a
-  tguard _formName part = part
 
 reformSingle :: (MonadIO m, Monoid view)
   => ([(Text, Text)] -> view -> view)
@@ -68,7 +57,7 @@ reformSingle toForm prefix formlet = do
   res <- res'
   case res of
     Error errs -> pure (Error errs, toForm [] $ viewf errs)
-    Ok (Proved _proofs _pos unProved) -> pure (Ok unProved, toForm [] $ viewf [])
+    Ok (Proved _ _ unProved') -> pure (Ok unProved', toForm [] $ viewf [])
   where
   env :: MonadIO m => FormId -> TrasaT m (Value Text)
   env formId = do

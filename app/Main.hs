@@ -13,24 +13,33 @@ module Main where
 import Data.ByteString.Lazy (ByteString)
 import Data.Functor.Identity
 import Data.Kind (Type)
+import Data.Text (Text)
+import Lucid
 import Network.Wai (Application)
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import Trasa.Core
-import Text.Reform.Core hiding (view)
-import Trasa.Server
-import Trasa.Form
-import Lucid
 import Text.Reform (Result(..))
-import Data.Text (Text)
-import qualified Control.Applicative
-import qualified Text.Read
+import Text.Reform.Core hiding (view)
+import Text.Reform.Lucid.Common
+import Trasa.Core
+import Trasa.Form.Lucid
+import Trasa.Server
+import qualified Data.ByteString.Lazy as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import qualified Data.ByteString.Lazy as B
+import qualified Text.Read
+import qualified Data.Text.Read as TR
 import qualified Trasa.Method as Method
 
-data FooB = FooB Int Int
+tshow :: Show a => a -> Text
+tshow = T.pack . show
+
+readInt :: Text -> Either Text Int
+readInt input = case (TR.signed TR.decimal) input of
+  Left err -> Left $ T.pack err
+  Right (i, _) -> Right i
+
+data Foo = Foo Int Int
   deriving Show
 
 -- Our route data type. We define this ourselves.
@@ -42,7 +51,7 @@ data Route :: [Type] -> [Param] -> Bodiedness -> Type -> Type where
     ByteString -- ^ the response body will be `ByteString`
   FormTest :: Route
     '[]
-    '[ 'Optional Text, 'Optional Int, 'Optional Text, 'Optional Int ]
+    '[]
     'Bodyless
     (Html ())
 
@@ -61,6 +70,7 @@ bytestring = CaptureCodec (TE.decodeUtf8 . B.toStrict) (Just . B.fromStrict . TE
 text :: CaptureCodec Text
 text = CaptureCodec id Just
 
+showReadCodec :: Show a => Read a => CaptureCodec a
 showReadCodec = CaptureCodec tshow (Text.Read.readMaybe . T.unpack)
 
 int :: CaptureCodec Int
@@ -78,7 +88,7 @@ meta route = case route of
     Method.get -- ^ http method: GET
   FormTest -> Meta
     (match "test" ./ end)
-    (optional "t1" text .& optional "i1" int .& optional "t2" text .& optional "i2" int .& qend)
+    (qend)
     bodyless
     (resp (one bodyHtml))
     Method.get
@@ -112,11 +122,11 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
 -- formArgs queries args = do
 --   pure RecNil
 
-formFooB :: Monad f => Form (TrasaT IO) Text Text (HtmlT f ()) () FooB
-formFooB = FooB 
-  <$> childErrors ++> label "Int Field 1" ++> inputInt readInt 0
-  <*> childErrors ++> label "Int Field 2" ++> inputInt readInt 0
-  <*  buttonSubmit (const (Right mempty)) "" ("Submit" :: Text)
+formFoo :: Monad f => Form (TrasaT IO) Text Text (HtmlT f ()) () Foo
+formFoo = Foo 
+  <$> childErrorList ++> label "Int Field 1" ++> inputInt readInt 0
+  <*> childErrorList ++> label "Int Field 2" ++> inputInt readInt 0
+  <*  buttonSubmit (const (Right T.empty)) "" ("Submit" :: Text)
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
 prepare = prepareWith meta
@@ -124,9 +134,9 @@ prepare = prepareWith meta
 link :: Prepared Route response -> Url
 link = (linkWith (mapMeta captureEncoding captureEncoding id id . meta))
 
-formTest :: Maybe Text -> Maybe Int -> Maybe Text -> Maybe Int -> TrasaT IO (Html ())
-formTest mt1 mi1 mt2 mi2 = do
-  (res, html) <- simpleReform (link (prepare FormTest Nothing Nothing Nothing Nothing)) formFooB
+formTest :: TrasaT IO (Html ())
+formTest = do
+  (res, html) <- simpleReformGET (link (prepare FormTest)) formFoo
   defaultLayout $ do
     case res of
       Ok x -> toHtml $ show x
