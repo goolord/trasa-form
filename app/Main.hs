@@ -20,8 +20,10 @@ import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import Ditto (Result(..))
 import Ditto.Core hiding (view)
+import Ditto.Lucid
 import Ditto.Lucid.Named
 import Trasa.Core
+import Trasa.Form
 import Trasa.Form.Lucid
 import Trasa.Server
 import Trasa.Extra
@@ -123,9 +125,9 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
 -- formArgs queries args = do
 --   pure RecNil
 
-formFoo :: Monad f => Form (TrasaT IO) Text Text (HtmlT f ()) Foo
+formFoo :: TrasaSimpleForm Foo
 formFoo = Foo 
-  <$> childErrorList ++> label "Int Field 1" ++> inputInt readInt "int1" 0
+  <$> childErrorList ++> label "Int Field 1" ++> setAttr [class_ "input"] (inputInt readInt "int1" 0)
   <*> childErrorList ++> label "Int Field 2" ++> inputInt readInt "int2" 0
   <*  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
 

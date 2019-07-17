@@ -10,6 +10,19 @@ import Ditto.Core hiding (view)
 import Ditto.Lucid
 import Ditto.Result
 import Trasa.Server
+import Trasa.Url
+
+queryParamReformGET :: (MonadIO m, Show b, Applicative f) 
+  => Text
+  -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
+  -> TrasaT m (Result err b, HtmlT f ())
+queryParamReformGET action = reformQP (formGenGET' action) "reform"
+
+queryParamReformPOST :: (MonadIO m, Show b, Applicative f) 
+  => Text
+  -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
+  -> TrasaT m (Result err b, HtmlT f ())
+queryParamReformPOST action = reformQP (formGenPOST' action) "reform"
 
 simpleReformGET :: (MonadIO m, Show b, Applicative f) 
   => Text
