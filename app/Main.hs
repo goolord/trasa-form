@@ -18,12 +18,13 @@ import Lucid
 import Network.Wai (Application)
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import Text.Reform (Result(..))
-import Text.Reform.Core hiding (view)
-import Text.Reform.Lucid.Common
+import Ditto (Result(..))
+import Ditto.Core hiding (view)
+import Ditto.Lucid.Named
 import Trasa.Core
 import Trasa.Form.Lucid
 import Trasa.Server
+import Trasa.Extra
 import qualified Data.ByteString.Lazy as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -122,21 +123,21 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
 -- formArgs queries args = do
 --   pure RecNil
 
-formFoo :: Monad f => Form (TrasaT IO) Text Text (HtmlT f ()) () Foo
+formFoo :: Monad f => Form (TrasaT IO) Text Text (HtmlT f ()) Foo
 formFoo = Foo 
-  <$> childErrorList ++> label "Int Field 1" ++> inputInt readInt 0
-  <*> childErrorList ++> label "Int Field 2" ++> inputInt readInt 0
-  <*  buttonSubmit (const (Right T.empty)) "" ("Submit" :: Text)
+  <$> childErrorList ++> label "Int Field 1" ++> inputInt readInt "int1" 0
+  <*> childErrorList ++> label "Int Field 2" ++> inputInt readInt "int2" 0
+  <*  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
 prepare = prepareWith meta
 
-link :: Prepared Route response -> Url
-link = (linkWith (mapMeta captureEncoding captureEncoding id id . meta))
+instance IsRoute Route where
+  metaF = meta
 
 formTest :: TrasaT IO (Html ())
 formTest = do
-  (res, html) <- simpleReformGET (link (prepare FormTest)) formFoo
+  (res, html) <- simpleReformGET (encodeRoute $ conceal (prepare FormTest)) formFoo
   defaultLayout $ do
     case res of
       Ok x -> toHtml $ show x
