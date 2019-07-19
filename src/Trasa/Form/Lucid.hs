@@ -11,6 +11,7 @@ import Ditto.Lucid
 import Ditto.Result
 import Trasa.Server
 import Trasa.Url
+import qualified Data.ByteString as BS
 
 queryParamReformGET :: (MonadIO m, Show b, Applicative f) 
   => Text
@@ -18,23 +19,18 @@ queryParamReformGET :: (MonadIO m, Show b, Applicative f)
   -> TrasaT m (Result err b, HtmlT f ())
 queryParamReformGET action = reformQP (formGenGET' action) "reform"
 
-queryParamReformPOST :: (MonadIO m, Show b, Applicative f) 
-  => Text
-  -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
-  -> TrasaT m (Result err b, HtmlT f ())
-queryParamReformPOST action = reformQP (formGenPOST' action) "reform"
-
 simpleReformGET :: (MonadIO m, Show b, Applicative f) 
   => Text
   -> Form (TrasaT m) Text err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
-simpleReformGET action = reform (formGenGET' action) "reform"
+simpleReformGET action form = reform (formGenGET' action) "reform" form
 
 simpleReformPOST :: (MonadIO m, Show b, Applicative f) 
   => Text
+  -> BS.ByteString
   -> Form (TrasaT m) Text err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
-simpleReformPOST action = reform (formGenPOST' action) "reform"
+simpleReformPOST action reqBody form = reformPost (formGenPOST' action) "reform"reqBody form
 
 formGenGET' :: Applicative f => Text -> [(Text, Text)] -> HtmlT f b -> HtmlT f b
 formGenGET' url = formGenGET url

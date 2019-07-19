@@ -14,6 +14,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Functor.Identity
 import Data.Kind (Type)
 import Data.Text (Text)
+-- import Data.List.NonEmpty (NonEmpty(..))
 import Lucid
 import Network.Wai (Application)
 import Network.Wai.Handler.Warp (run)
@@ -27,7 +28,8 @@ import Trasa.Form
 import Trasa.Form.Lucid
 import Trasa.Server
 import Trasa.Extra
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Text.Read
@@ -57,6 +59,17 @@ data Route :: [Type] -> [Param] -> Bodiedness -> Type -> Type where
     '[]
     'Bodyless
     (Html ())
+  FormTestPost :: Route
+    '[]
+    '[]
+    ('Body B.ByteString)
+    (Html ())
+
+bodyAny :: BodyCodec B.ByteString
+bodyAny = BodyCodec
+  (pure "*/*")
+  (BL.fromStrict)
+  (Right . BL.toStrict)
 
 bodyText :: BodyCodec ByteString
 bodyText = BodyCodec 
@@ -68,7 +81,7 @@ bodyHtml :: BodyCodec (Html a)
 bodyHtml = BodyCodec (pure "text/html;charset=utf-8") renderBS (const (Left "can not decode html"))
 
 bytestring :: CaptureCodec ByteString
-bytestring = CaptureCodec (TE.decodeUtf8 . B.toStrict) (Just . B.fromStrict . TE.encodeUtf8)
+bytestring = CaptureCodec (TE.decodeUtf8 . BL.toStrict) (Just . BL.fromStrict . TE.encodeUtf8)
 
 text :: CaptureCodec Text
 text = CaptureCodec id Just
@@ -95,6 +108,12 @@ meta route = case route of
     bodyless
     (resp (one bodyHtml))
     Method.get
+  FormTestPost -> Meta
+    (match "test" ./ match "post" ./ end)
+    (qend)
+    (body (one bodyAny))
+    (resp (one bodyHtml))
+    Method.post
 
 -- | this function defines how we handle routes with our web server:
 --   what actions we perform based on the route and its captures & queries
@@ -108,6 +127,7 @@ routes
 routes route captures queries reqBody = case route of
   HelloWorld -> go helloWorld
   FormTest -> go formTest
+  FormTestPost -> go formTestPost
   where
   -- | this helper function uses the `handler` function to unwrap the `Arguments` type family.
   go :: Arguments captures queries request (TrasaT IO response) -> TrasaT IO response
@@ -139,12 +159,17 @@ instance IsRoute Route where
 
 formTest :: TrasaT IO (Html ())
 formTest = do
-  (res, html) <- simpleReformGET (encodeRoute $ conceal (prepare FormTest)) formFoo
+  (_, html) <- simpleReformPOST (encodeRoute $ conceal (prepare FormTestPost "")) "" formFoo
+  defaultLayout $ do
+    html
+
+formTestPost :: B.ByteString -> TrasaT IO (Html ())
+formTestPost req = do
+  (res, _) <- simpleReformPOST (encodeRoute $ conceal (prepare FormTestPost "")) req formFoo
   defaultLayout $ do
     case res of
       Ok x -> toHtml $ show x
-      Error _ -> mempty
-    html
+      Error xs -> toHtml $ show xs
 
 defaultLayout :: Html () -> TrasaT IO (Html ())
 defaultLayout children = do
@@ -156,7 +181,7 @@ defaultLayout children = do
 
 -- | We define a list of all the routes for our server for wai
 allRoutes :: [Constructed Route]
-allRoutes = [Constructed HelloWorld, Constructed FormTest]
+allRoutes = [Constructed HelloWorld, Constructed FormTest, Constructed FormTestPost]
 
 -- | Another implimentaiton detail: this creates the data structure used to do routing
 router :: Router Route
