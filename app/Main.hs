@@ -167,6 +167,7 @@ formTestPost :: B.ByteString -> TrasaT IO (Html ())
 formTestPost req = do
   (res, _) <- simpleReformPOST (encodeRoute $ conceal (prepare FormTestPost "")) req formFoo
   defaultLayout $ do
+    toHtml req
     case res of
       Ok x -> toHtml $ show x
       Error xs -> toHtml $ show xs

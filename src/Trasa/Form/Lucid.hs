@@ -25,12 +25,12 @@ simpleReformGET :: (MonadIO m, Show b, Applicative f)
   -> TrasaT m (Result err b, HtmlT f ())
 simpleReformGET action form = reform (formGenGET' action) "reform" form
 
-simpleReformPOST :: (MonadIO m, Show b, Applicative f) 
+queryParamReformPOST :: (MonadIO m, Show b, Applicative f) 
   => Text
   -> BS.ByteString
-  -> Form (TrasaT m) Text err (HtmlT f ()) b 
+  -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
-simpleReformPOST action reqBody form = reformPost (formGenPOST' action) "reform"reqBody form
+queryParamReformPOST action reqBody form = reformPost (formGenPOST' action) "reform" reqBody form
 
 formGenGET' :: Applicative f => Text -> [(Text, Text)] -> HtmlT f b -> HtmlT f b
 formGenGET' url = formGenGET url

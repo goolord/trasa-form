@@ -26,6 +26,8 @@ library
   ghc-options: -Wall
   build-depends: 
       base
+    , attoparsec
+    , http-api-data
     , cookie
     , email-validate
     , http-types
@@ -37,7 +39,6 @@ library
     , ditto-lucid == 0.1.0.*
     , text
     , trasa
-    , wai-extra == 3.0.27 
     , trasa-server >= 0.5.3
     , unordered-containers
     , containers

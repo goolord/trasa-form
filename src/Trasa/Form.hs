@@ -25,15 +25,12 @@ import Ditto.Result
 import Trasa.Core hiding (optional)
 import Trasa.Server
 import Trasa.Url
-import qualified Network.Wai.Parse as Wai
+import qualified Web.FormUrlEncoded as HTTP
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BC8
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
-
----- REFORM ----
 
 instance FormError Text where
   type ErrorInputType Text = Text
@@ -49,9 +46,6 @@ liftParser f q = case q of
 
 tshow :: Show a => a -> Text
 tshow = T.pack . show
-
-bshow :: Show a => a -> BS.ByteString
-bshow = BC8.pack . show
 
 type TrasaSimpleForm a = Form (TrasaT IO) Text Text (Html ()) a
 type TrasaForm a = Form (TrasaT IO) QueryParam Text (Html ()) a
@@ -122,7 +116,7 @@ reformPost :: (MonadIO m, Monoid view)
   => ([(Text, Text)] -> view -> view) -- ^ wrap raw form html inside a <form> tag
   -> Text -- ^ form name prefix
   -> BS.ByteString
-  -> Form (TrasaT m) Text err view a  -- ^ the formlet
+  -> Form (TrasaT m) QueryParam err view a  -- ^ the formlet
   -> TrasaT m (Result err a, view)
 reformPost toForm prefix reqBody formlet = do 
   reformSinglePost toForm' prefix reqBody formlet
@@ -133,30 +127,26 @@ reformSinglePost :: (MonadIO m, Monoid view)
   => ([(Text, Text)] -> view -> view)
   -> Text
   -> BS.ByteString
-  -> Form (TrasaT m) Text err view a
+  -> Form (TrasaT m) QueryParam err view a
   -> TrasaT m (Result err a, view)
 reformSinglePost toForm prefix reqBody formlet = do
-  (multipart, _) <- lift $ liftIO $ parseRequestBody Wai.lbsBackEnd (Just Wai.UrlEncoded) reqBody
-  (View viewf, res') <- runForm (Environment $ env multipart) (TL.fromStrict prefix) formlet
+  let formData = parseRequestBody reqBody
+  (View viewf, res') <- runForm (Environment $ env formData) (TL.fromStrict prefix) formlet
   res <- res'
   case res of
     Error errs -> pure (Error errs, toForm [] $ viewf errs)
     Ok (Proved _ unProved') -> pure (Ok unProved', toForm [] $ viewf [])
   where
-  env :: MonadIO m => [(BS.ByteString, BS.ByteString)] -> FormId -> TrasaT m (Value Text)
+  env :: MonadIO m => HM.HashMap Text [Text] -> FormId -> TrasaT m (Value QueryParam)
   env multipart formId = do
-    let val = T.decodeUtf8 <$> lookup (bshow formId) multipart
+    let val = HM.lookup (tshow formId) multipart
     case val of
       Nothing -> pure Missing
-      Just x -> pure (Found x)
+      Just [] -> pure $ Found QueryParamFlag
+      Just [x] -> pure $ Found $ QueryParamSingle x
+      Just xs -> pure $ Found $ QueryParamList xs
 
-parseRequestBody ::  Show y =>
-     Wai.BackEnd y
-  -> Maybe (Wai.RequestBodyType)
-  -> BS.ByteString
-  -> IO ([Wai.Param], [Wai.File y])
-parseRequestBody s rtype r = case rtype of
-  Nothing -> do
-    pure ([], [])
-  Just rbt -> do
-    Wai.sinkRequestBodyEx Wai.defaultParseRequestBodyOptions s rbt (pure r)
+parseRequestBody :: BS.ByteString -> HM.HashMap Text [Text]
+parseRequestBody reqBody = case HTTP.urlDecodeForm (BSL.fromStrict reqBody) of
+  Left _ -> HM.empty
+  Right (HTTP.Form formData) -> formData
