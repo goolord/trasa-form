@@ -14,26 +14,25 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Functor.Identity
 import Data.Kind (Type)
 import Data.Text (Text)
--- import Data.List.NonEmpty (NonEmpty(..))
+import Ditto (Result(..))
+import Ditto.Core 
+import Ditto.Lucid
+import Ditto.Lucid.Named
 import Lucid
 import Network.Wai (Application)
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import Ditto (Result(..))
-import Ditto.Core hiding (view)
-import Ditto.Lucid
-import Ditto.Lucid.Named
 import Trasa.Core
+import Trasa.Extra
 import Trasa.Form
 import Trasa.Form.Lucid
 import Trasa.Server
-import Trasa.Extra
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import qualified Text.Read
 import qualified Data.Text.Read as TR
+import qualified Text.Read
 import qualified Trasa.Method as Method
 
 tshow :: Show a => a -> Text
@@ -44,7 +43,7 @@ readInt input = case (TR.signed TR.decimal) input of
   Left err -> Left $ T.pack err
   Right (i, _) -> Right i
 
-data Foo = Foo Int Int
+data Foo = Foo Int Bool Int
   deriving Show
 
 -- Our route data type. We define this ourselves.
@@ -146,10 +145,15 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
 --   pure RecNil
 
 formFoo :: TrasaSimpleForm Foo
-formFoo = Foo 
-  <$> childErrorList ++> label "Int Field 1" ++> setAttr [class_ "input"] (inputInt readInt "int1" 0)
-  <*> childErrorList ++> label "Int Field 2" ++> inputInt readInt "int2" 0
+formFoo = childErrorList ++> ( Foo 
+  <$> label "Int Field 1" "int1" 
+      ++> setAttr [class_ "input"] (inputInt readInt "int1" 0)
+  <*> label "Bool Field 1" "bool1"
+      ++> inputYesNo "bool1"
+  <*> label "Int Field 2" "in2" 
+      ++> inputInt readInt "int2" 0
   <*  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
+  )
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
 prepare = prepareWith meta
@@ -159,18 +163,20 @@ instance IsRoute Route where
 
 formTest :: TrasaT IO (Html ())
 formTest = do
-  (_, html) <- simpleReformPOST (encodeRoute $ conceal (prepare FormTestPost "")) "" formFoo
+  (res, html) <- simpleReformGET (encodeRoute $ conceal (prepare FormTest)) formFoo
   defaultLayout $ do
+    case res of
+      Ok x -> do
+        toHtml $ show x
+        br_ []
+      Error xs -> do
+        toHtml $ show xs
+        br_ []
     html
 
 formTestPost :: B.ByteString -> TrasaT IO (Html ())
-formTestPost req = do
-  (res, _) <- simpleReformPOST (encodeRoute $ conceal (prepare FormTestPost "")) req formFoo
-  defaultLayout $ do
-    toHtml req
-    case res of
-      Ok x -> toHtml $ show x
-      Error xs -> toHtml $ show xs
+formTestPost _ = do
+  pure $ pure ()
 
 defaultLayout :: Html () -> TrasaT IO (Html ())
 defaultLayout children = do
@@ -197,4 +203,9 @@ application = serveWith
 
 main :: IO ()
 main = run 8080 (logStdoutDev application)
+
+inputYesNo :: String -> TrasaSimpleForm Bool
+inputYesNo s = mapView 
+  (\x -> label_ [for_ (T.pack s)] $ x *> "Enabled")
+  (inputCheckbox False s)
 

@@ -2,13 +2,13 @@
 
 module Trasa.Form.Lucid where
 
-import Trasa.Form
 import Control.Monad.Except
 import Data.Text (Text)
-import Lucid
 import Ditto.Core hiding (view)
 import Ditto.Lucid
 import Ditto.Result
+import Lucid
+import Trasa.Form
 import Trasa.Server
 import Trasa.Url
 import qualified Data.ByteString as BS

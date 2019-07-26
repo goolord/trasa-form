@@ -18,19 +18,19 @@ module Trasa.Form
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Text (Text)
-import Lucid
 import Ditto.Backend
 import Ditto.Core hiding (view)
 import Ditto.Result
+import Lucid
 import Trasa.Core hiding (optional)
 import Trasa.Server
 import Trasa.Url
-import qualified Web.FormUrlEncoded as HTTP
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
+import qualified Web.FormUrlEncoded as HTTP
 
 instance FormError Text where
   type ErrorInputType Text = Text
