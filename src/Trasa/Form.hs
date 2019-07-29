@@ -40,6 +40,13 @@ instance FormError QueryParam Text where
     encQP (QueryParamSingle x) = x
     encQP (QueryParamList xs) = tshow xs
 
+instance FormInput QueryParam where
+  type FileType QueryParam = ()
+  getInputStrings (QueryParamSingle x) = [T.unpack x]
+  getInputStrings (QueryParamList xs) = fmap T.unpack xs
+  getInputStrings (QueryParamFlag) = []
+  getInputFile _ = Left $ commonFormError $ (NoFileFound (QueryParamSingle "No support for file uploads") :: CommonFormError QueryParam)
+
 liftParser :: (Text -> Either Text a) -> (QueryParam -> Either Text a)
 liftParser f q = case q of
   QueryParamSingle x -> f x
