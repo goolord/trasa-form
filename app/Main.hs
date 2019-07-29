@@ -16,7 +16,7 @@ import Data.Kind (Type)
 import Data.Text (Text)
 import Ditto (Result(..))
 import Ditto.Core 
-import Ditto.Lucid
+-- import Ditto.Lucid
 import Ditto.Lucid.Named
 import Lucid
 import Network.Wai (Application)
@@ -145,15 +145,25 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
 --   pure RecNil
 
 formFoo :: TrasaSimpleForm Foo
-formFoo = childErrorList ++> ( Foo 
-  <$> label "Int Field 1" "int1" 
-      ++> setAttr [class_ "input"] (inputInt readInt "int1" 0)
-  <*> label "Bool Field 1" "bool1"
-      ++> inputYesNo "bool1"
-  <*> label "Int Field 2" "in2" 
-      ++> inputInt readInt "int2" 0
-  <*  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
-  )
+formFoo = do
+  label "Int Field 1" "int1"
+  int1 <- inputInt readInt "int1" 0
+  label "Bool Field 1" "bool1"
+  bool1 <- inputYesNo "bool1"
+  label "Int Field 2" "in2" 
+  int2 <- inputInt readInt "int2" int1
+  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
+  pure (Foo int1 bool1 int2)
+
+-- childErrorList ++> ( Foo 
+  -- <$> label "Int Field 1" "int1" 
+      -- ++> setAttr [class_ "input"] (inputInt readInt "int1" 0)
+  -- <*> label "Bool Field 1" "bool1"
+      -- ++> inputYesNo "bool1"
+  -- <*> label "Int Field 2" "in2" 
+      -- ++> inputInt readInt "int2" 0
+  -- <*  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
+  -- )
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
 prepare = prepareWith meta
