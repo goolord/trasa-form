@@ -26,7 +26,7 @@ library
   -- other-extensions:
   ghc-options: -Wall
   build-depends: 
-      base
+      base < 5
     , http-api-data
     , cookie
     , http-types
