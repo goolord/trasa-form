@@ -32,10 +32,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Web.FormUrlEncoded as HTTP
 
-instance FormError Text where
-  type ErrorInputType Text = Text
-  commonFormError = T.pack . (commonFormErrorStr T.unpack)
-
 liftParser :: (Text -> Either Text a) -> (QueryParam -> Either Text a)
 liftParser f q = case q of
   QueryParamSingle x -> f x
