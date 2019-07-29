@@ -1,6 +1,7 @@
 {-# language ConstraintKinds #-}
 {-# language OverloadedStrings #-}
 {-# language TypeFamilies #-}
+{-# language MultiParamTypeClasses #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -31,6 +32,13 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Web.FormUrlEncoded as HTTP
+
+instance FormError QueryParam Text where
+  commonFormError = commonFormErrorText encQP
+    where
+    encQP QueryParamFlag = "<flag>"
+    encQP (QueryParamSingle x) = x
+    encQP (QueryParamList xs) = tshow xs
 
 liftParser :: (Text -> Either Text a) -> (QueryParam -> Either Text a)
 liftParser f q = case q of
