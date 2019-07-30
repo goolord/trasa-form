@@ -13,19 +13,19 @@ import Trasa.Server
 import Trasa.Url
 import qualified Data.ByteString as BS
 
-queryParamReformGET :: (MonadIO m, Show b, Applicative f) 
+queryParamReformGET :: (MonadIO m, Applicative f) 
   => Text
   -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
 queryParamReformGET action = reformQP (formGenGET' action) "reform"
 
-simpleReformGET :: (MonadIO m, Show b, Applicative f) 
+simpleReformGET :: (MonadIO m, Applicative f) 
   => Text
   -> Form (TrasaT m) Text err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
 simpleReformGET action form = reform (formGenGET' action) "reform" form
 
-queryParamReformPOST :: (MonadIO m, Show b, Applicative f) 
+queryParamReformPOST :: (MonadIO m, Applicative f) 
   => Text
   -> BS.ByteString
   -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
