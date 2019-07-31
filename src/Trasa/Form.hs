@@ -2,6 +2,7 @@
 {-# language OverloadedStrings #-}
 {-# language TypeFamilies #-}
 {-# language MultiParamTypeClasses #-}
+{-# language GeneralizedNewtypeDeriving #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -13,7 +14,7 @@ module Trasa.Form
   , TrasaForm
   , TrasaSimpleForm
   , FormError(..)
-  , FormData
+  , FormData(..)
   , bodyFormData
   )
   where
@@ -157,6 +158,7 @@ reformSinglePost toForm prefix (FormData formData) formlet = do
       Just xs -> pure $ Found $ QueryParamList xs
 
 newtype FormData a = FormData { getFormData :: HM.HashMap Text [Text] }
+  deriving (Monoid, Semigroup, Eq, Ord, Show)
 
 bodyFormData :: HTTP.ToForm a => BodyCodec (FormData a)
 bodyFormData = BodyCodec
