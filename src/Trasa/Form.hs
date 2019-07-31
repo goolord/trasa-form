@@ -13,6 +13,8 @@ module Trasa.Form
   , TrasaForm
   , TrasaSimpleForm
   , FormError(..)
+  , FormData
+  , bodyFormData
   )
   where
 
@@ -26,8 +28,6 @@ import Lucid
 import Trasa.Core hiding (optional)
 import Trasa.Server
 import Trasa.Url
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
@@ -126,7 +126,7 @@ reformSingleQP toForm prefix formlet = do
 reformPost :: (MonadIO m, Monoid view)  
   => ([(Text, Text)] -> view -> view) -- ^ wrap raw form html inside a <form> tag
   -> Text -- ^ form name prefix
-  -> BS.ByteString
+  -> FormData a
   -> Form (TrasaT m) QueryParam err view a  -- ^ the formlet
   -> TrasaT m (Result err a, view)
 reformPost toForm prefix reqBody formlet = do 
@@ -137,11 +137,10 @@ reformPost toForm prefix reqBody formlet = do
 reformSinglePost :: (MonadIO m, Monoid view)
   => ([(Text, Text)] -> view -> view)
   -> Text
-  -> BS.ByteString
+  -> FormData a
   -> Form (TrasaT m) QueryParam err view a
   -> TrasaT m (Result err a, view)
-reformSinglePost toForm prefix reqBody formlet = do
-  let formData = parseRequestBody reqBody
+reformSinglePost toForm prefix (FormData formData) formlet = do
   (View viewf, res') <- runForm (Environment $ env formData) (TL.fromStrict prefix) formlet
   res <- res'
   case res of
@@ -157,7 +156,11 @@ reformSinglePost toForm prefix reqBody formlet = do
       Just [x] -> pure $ Found $ QueryParamSingle x
       Just xs -> pure $ Found $ QueryParamList xs
 
-parseRequestBody :: BS.ByteString -> HM.HashMap Text [Text]
-parseRequestBody reqBody = case HTTP.urlDecodeForm (BSL.fromStrict reqBody) of
-  Left _ -> HM.empty
-  Right (HTTP.Form formData) -> formData
+newtype FormData a = FormData { getFormData :: HM.HashMap Text [Text] }
+
+bodyFormData :: HTTP.ToForm a => BodyCodec (FormData a)
+bodyFormData = BodyCodec
+  (pure "application/x-www-form-urlencoded")
+  (HTTP.urlEncodeAsForm . getFormData)
+  (fmap (FormData . HTTP.unForm) . HTTP.urlDecodeForm)
+

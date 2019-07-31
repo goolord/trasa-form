@@ -1,12 +1,15 @@
+{-# language ApplicativeDo #-}
 {-# language DataKinds #-}
 {-# language GADTs #-}
 {-# language KindSignatures #-}
 {-# language OverloadedStrings #-}
+{-# language PolyKinds #-}
 {-# language ScopedTypeVariables #-}
 {-# language TypeApplications #-}
-{-# language TypeOperators #-}
 {-# language TypeFamilies #-}
-{-# language PolyKinds #-}
+{-# language TypeOperators #-}
+
+{-# options_ghc -fno-warn-orphans #-}
 
 module Main where
 
@@ -14,8 +17,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Functor.Identity
 import Data.Kind (Type)
 import Data.Text (Text)
-import Ditto (Result(..))
-import Ditto.Core 
+import Ditto (Result(..), FormInput(..), CommonFormError(..))
 -- import Ditto.Lucid
 import Ditto.Lucid.Named
 import Lucid
@@ -144,16 +146,16 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
 -- formArgs queries args = do
 --   pure RecNil
 
-formFoo :: TrasaSimpleForm Foo
+formFoo :: TrasaForm Foo
 formFoo = do
   label "Int Field 1" "int1"
-  int1 <- inputInt readInt "int1" 0
+  int1 <- inputInt (liftParser readInt) "int1" 0
   label "Bool Field 1" "bool1"
   bool1 <- inputYesNo "bool1"
   label "Int Field 2" "in2" 
-  int2 <- inputInt readInt "int2" int1
+  int2 <- inputInt (liftParser readInt) "int2" 0
   buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
-  pure (Foo int1 bool1 int2)
+  pure $ Foo int1 bool1 int2
 
 -- childErrorList ++> ( Foo 
   -- <$> label "Int Field 1" "int1" 
@@ -173,7 +175,7 @@ instance IsRoute Route where
 
 formTest :: TrasaT IO (Html ())
 formTest = do
-  (res, html) <- simpleReformGET (encodeRoute $ conceal (prepare FormTest)) formFoo
+  (res, html) <- queryParamReformGET (encodeRoute $ conceal (prepare FormTest)) formFoo
   defaultLayout $ do
     case res of
       Ok x -> do
@@ -214,8 +216,18 @@ application = serveWith
 main :: IO ()
 main = run 8080 (logStdoutDev application)
 
-inputYesNo :: String -> TrasaSimpleForm Bool
-inputYesNo s = mapView 
-  (\x -> label_ [for_ (T.pack s)] $ x *> "Enabled")
-  (inputCheckbox False s)
+inputYesNo :: String -> TrasaForm Bool
+inputYesNo s = select s
+  [ (False, "No")
+  , (True, "Yes")
+  ]
+  (==True)
+  -- mapView 
+  -- (\x -> label_ [for_ (T.pack s)] $ x *> "Enabled")
+  -- (inputCheckbox False s)
 
+
+instance FormInput Text where
+  type FileType Text = ()
+  getInputStrings = pure . T.unpack
+  getInputFile _ = Left $ commonFormError $ (NoFileFound ("No support for file uploads") :: CommonFormError Text)

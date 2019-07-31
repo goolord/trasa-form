@@ -11,7 +11,6 @@ import Lucid
 import Trasa.Form
 import Trasa.Server
 import Trasa.Url
-import qualified Data.ByteString as BS
 
 queryParamReformGET :: (MonadIO m, Applicative f) 
   => Text
@@ -27,7 +26,7 @@ simpleReformGET action form = reform (formGenGET' action) "reform" form
 
 queryParamReformPOST :: (MonadIO m, Applicative f) 
   => Text
-  -> BS.ByteString
+  -> FormData b
   -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
 queryParamReformPOST action reqBody form = reformPost (formGenPOST' action) "reform" reqBody form
