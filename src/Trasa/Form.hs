@@ -163,6 +163,6 @@ newtype FormData a = FormData { getFormData :: HM.HashMap Text [Text] }
 bodyFormData :: HTTP.ToForm a => BodyCodec (FormData a)
 bodyFormData = BodyCodec
   (pure "application/x-www-form-urlencoded")
-  (HTTP.urlEncodeAsForm . getFormData)
+  (HTTP.urlEncodeAsFormStable . getFormData)
   (fmap (FormData . HTTP.unForm) . HTTP.urlDecodeForm)
 
