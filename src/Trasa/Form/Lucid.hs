@@ -12,14 +12,14 @@ import Trasa.Form
 import Trasa.Server
 import Trasa.Url
 
-queryParamReformGET :: (MonadIO m, Applicative f) 
+formGET :: (MonadIO m, Applicative f) 
   => Text
   -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
-queryParamReformGET action = reformQP (formGenGET' action) "reform"
+formGET action = reform (formGenGET action) "ditto"
 
-formGenGET' :: Applicative f => Text -> [(Text, Text)] -> HtmlT f b -> HtmlT f b
-formGenGET' url = formGenGET url
-
-formGenPOST' :: Applicative f => Text -> [(Text, Text)] -> HtmlT f b -> HtmlT f b
-formGenPOST' url = formGenPOST url
+formPOST :: (MonadIO m, Applicative f) 
+  => Text
+  -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
+  -> TrasaT m (Result err b, HtmlT f ())
+formPOST action = reform (formGenGET action) "ditto"
