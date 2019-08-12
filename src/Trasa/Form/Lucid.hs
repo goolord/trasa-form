@@ -20,6 +20,7 @@ formGET action = reform (formGenGET action) "ditto"
 
 formPOST :: (MonadIO m, Applicative f) 
   => Text
+  -> FormData b
   -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
-formPOST action = reform (formGenGET action) "ditto"
+formPOST action formData = reformPost (formGenGET action) "ditto" formData
