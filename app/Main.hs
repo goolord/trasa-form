@@ -1,4 +1,3 @@
-{-# language ApplicativeDo #-}
 {-# language DataKinds #-}
 {-# language GADTs #-}
 {-# language KindSignatures #-}
@@ -18,6 +17,7 @@ import Data.Functor.Identity
 import Data.Kind (Type)
 import Data.Text (Text)
 import Ditto (Result(..), FormInput(..), CommonFormError(..))
+import Control.Monad (void)
 -- import Ditto.Lucid
 import Ditto.Lucid.Named
 import Lucid
@@ -29,6 +29,7 @@ import Trasa.Extra
 import Trasa.Form
 import Trasa.Form.Lucid
 import Trasa.Server
+import Web.PathPieces
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
@@ -153,19 +154,9 @@ formFoo = do
   label "Bool Field 1" "bool1"
   bool1 <- inputYesNo "bool1"
   label "Int Field 2" "in2" 
-  int2 <- inputInt (liftParser readInt) "int2" 0
-  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
+  int2 <- inputInt (liftParser readInt) "int2" (int1 + 1)
+  void $ buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
   pure $ Foo int1 bool1 int2
-
--- childErrorList ++> ( Foo 
-  -- <$> label "Int Field 1" "int1" 
-      -- ++> setAttr [class_ "input"] (inputInt readInt "int1" 0)
-  -- <*> label "Bool Field 1" "bool1"
-      -- ++> inputYesNo "bool1"
-  -- <*> label "Int Field 2" "in2" 
-      -- ++> inputInt readInt "int2" 0
-  -- <*  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
-  -- )
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
 prepare = prepareWith meta
@@ -216,16 +207,16 @@ application = serveWith
 main :: IO ()
 main = run 8080 (logStdoutDev application)
 
-inputYesNo :: String -> TrasaForm Bool
+inputYesNo :: Text -> TrasaForm Bool
 inputYesNo s = select s
   [ (False, "No")
   , (True, "Yes")
   ]
+  (liftParser $ note "Failed to decode Bool" . fromPathPiece)
   (==True)
-  -- mapView 
-  -- (\x -> label_ [for_ (T.pack s)] $ x *> "Enabled")
-  -- (inputCheckbox False s)
 
+note :: err -> Maybe a -> Either err a
+note e = maybe (Left e) Right
 
 instance FormInput Text where
   type FileType Text = ()
