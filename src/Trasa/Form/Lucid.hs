@@ -23,4 +23,4 @@ formPOST :: (MonadIO m, Applicative f)
   -> FormData b
   -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
-formPOST action formData = reformPost (formGenGET action) "ditto" formData
+formPOST action formData = reformPost (formGenPOST action) "ditto" formData
