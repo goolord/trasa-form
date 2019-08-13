@@ -71,7 +71,7 @@ reform :: (MonadIO m, Monoid view)
 reform toForm prefix formlet = do 
   reformSingle toForm' prefix formlet
   where
-  toForm' hidden view = toForm (("formname",prefix) : hidden) view
+  toForm' hidden view = toForm (hidden) view
 
 reformSingle :: (MonadIO m, Monoid view)
   => ([(Text, Text)] -> view -> view)
@@ -102,7 +102,7 @@ reformPost :: (MonadIO m, Monoid view)
 reformPost toForm prefix reqBody formlet = do 
   reformSinglePost toForm' prefix reqBody formlet
   where
-  toForm' hidden view = toForm (("formname",prefix) : hidden) view
+  toForm' hidden view = toForm (hidden) view
 
 reformSinglePost :: (MonadIO m, Monoid view)
   => ([(Text, Text)] -> view -> view)

@@ -17,9 +17,12 @@ import Data.Functor.Identity
 import Data.Kind (Type)
 import Data.Text (Text)
 import Ditto (Result(..), FormInput(..), CommonFormError(..))
+import Ditto.Generalized.Named (withErrors)
 import Control.Monad (void)
+import Data.List.NonEmpty (NonEmpty(..))
 -- import Ditto.Lucid
 import Ditto.Lucid.Named
+import qualified Data.Foldable as F
 import Lucid
 import Network.Wai (Application)
 import Network.Wai.Handler.Warp (run)
@@ -46,7 +49,7 @@ readInt input = case (TR.signed TR.decimal) input of
   Left err -> Left $ T.pack err
   Right (i, _) -> Right i
 
-data Foo = Foo Int Bool Int
+data Foo = Foo Int Bool Char Text
   deriving Show
 
 -- Our route data type. We define this ourselves.
@@ -143,20 +146,27 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
   QueryArguments '[] r = r
   QueryArguments (q ': qs) r = ParamBase q -> QueryArguments qs r
 
--- formArgs :: Monad f => Rec Parameter qrys -> QueryArguments qrys (f (Rec Parameter qrys))
--- formArgs queries args = do
---   pure RecNil
-
 formFoo :: TrasaForm Foo
 formFoo = do
-  label "Int Field 1" "int1"
-  int1 <- inputInt (liftParser readInt) "int1" 0
-  label "Bool Field 1" "bool1"
-  bool1 <- inputYesNo "bool1"
-  label "Int Field 2" "in2" 
-  int2 <- inputInt (liftParser readInt) "int2" (int1 + 1)
+  label "Int Field" "int"
+  int' <- withErrors' $ inputInt (liftParser readInt) "int" 0
+  label "Bool Field" "bool"
+  bool <- withErrors' $ inputYesNo "bool"
+  label "Char Field" "char" 
+  char <- withErrors' $ inputText (liftParser readChar) "char" 'a'
+  label "Text Field" "text"
+  text' <- withErrors' $ inputText (liftParser Right) "text" "empty"
   void $ buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
-  pure $ Foo int1 bool1 int2
+  pure $ Foo int' bool char text'
+
+-- formFoo :: TrasaForm Foo
+-- formFoo = Foo
+  -- <$> inputInt (liftParser readInt) "int" 0
+  -- <*> inputYesNo "bool"
+  -- <*> (withErrors' $ inputText (liftParser readChar) "char" 'a')
+  -- <*>(  ( inputText (liftParser Right) "text" "empty" )
+     -- <* ( void $ buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text) )
+     -- )
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
 prepare = prepareWith meta
@@ -166,7 +176,7 @@ instance IsRoute Route where
 
 formTest :: TrasaT IO (Html ())
 formTest = do
-  (res, html) <- queryParamReformGET (encodeRoute $ conceal (prepare FormTest)) formFoo
+  (res, html) <- formGET (encodeRoute $ conceal (prepare FormTest)) formFoo
   defaultLayout $ do
     case res of
       Ok x -> do
@@ -209,16 +219,36 @@ main = run 8080 (logStdoutDev application)
 
 inputYesNo :: Text -> TrasaForm Bool
 inputYesNo s = select s
-  [ (False, "No")
-  , (True, "Yes")
-  ]
+  ( (False, "No") :|
+  [ (True, "Yes")
+  ] )
   (liftParser $ note "Failed to decode Bool" . fromPathPiece)
   (==True)
 
 note :: err -> Maybe a -> Either err a
 note e = maybe (Left e) Right
 
+readChar :: Text -> Either Text Char
+readChar input
+  | len > 1 = Left "Too many characters"
+  | len < 1 = Left "empty"
+  | otherwise = Right $ T.head input
+  where 
+  len = T.length input
+
 instance FormInput Text where
   type FileType Text = ()
   getInputStrings = pure . T.unpack
   getInputFile _ = Left $ commonFormError $ (NoFileFound ("No support for file uploads") :: CommonFormError Text)
+
+instance PathPiece Char where
+  toPathPiece = T.singleton
+  fromPathPiece = either (const Nothing) Just . readChar
+
+withErrors' :: TrasaForm a -> TrasaForm a
+withErrors' = withErrors renderErrors
+
+renderErrors :: Html () -> [Text] -> Html ()
+renderErrors formlet xs = do
+  formlet
+  F.for_ xs $ p_ [] . toHtml
