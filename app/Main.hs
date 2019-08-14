@@ -33,6 +33,9 @@ import Trasa.Form
 import Trasa.Form.Lucid
 import Trasa.Server
 import Web.PathPieces
+import Web.FormUrlEncoded (ToForm(..))
+import qualified Web.FormUrlEncoded as HTTP
+import qualified GHC.Exts as Exts
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
@@ -52,6 +55,14 @@ readInt input = case (TR.signed TR.decimal) input of
 data Foo = Foo Int Bool Char Text
   deriving Show
 
+instance ToForm Foo where 
+  toForm (Foo int' bool char text') = HTTP.Form $ Exts.fromList
+    [ ("int",  pure $ toPathPiece int')
+    , ("bool", pure $ toPathPiece bool)
+    , ("char", pure $ toPathPiece char)
+    , ("text", pure $ toPathPiece text')
+    ]
+
 -- Our route data type. We define this ourselves.
 data Route :: [Type] -> [Param] -> Bodiedness -> Type -> Type where
   HelloWorld :: Route 
@@ -67,7 +78,7 @@ data Route :: [Type] -> [Param] -> Bodiedness -> Type -> Type where
   FormTestPost :: Route
     '[]
     '[]
-    ('Body B.ByteString)
+    ('Body (FormData Foo)) 
     (Html ())
 
 bodyAny :: BodyCodec B.ByteString
@@ -116,7 +127,7 @@ meta route = case route of
   FormTestPost -> Meta
     (match "test" ./ match "post" ./ end)
     (qend)
-    (body (one bodyAny))
+    (body (one bodyFormData))
     (resp (one bodyHtml))
     Method.post
 
@@ -176,7 +187,7 @@ instance IsRoute Route where
 
 formTest :: TrasaT IO (Html ())
 formTest = do
-  (res, html) <- formGET (encodeRoute $ conceal (prepare FormTest)) formFoo
+  (res, html) <- formPOST (encodeRoute $ conceal (prepare FormTestPost mempty)) mempty formFoo
   defaultLayout $ do
     case res of
       Ok x -> do
@@ -187,9 +198,18 @@ formTest = do
         br_ []
     html
 
-formTestPost :: B.ByteString -> TrasaT IO (Html ())
-formTestPost _ = do
-  pure $ pure ()
+formTestPost :: FormData Foo -> TrasaT IO (Html ())
+formTestPost fd = do
+  (res, html) <- formPOST (encodeRoute $ conceal (prepare FormTestPost mempty)) fd formFoo
+  defaultLayout $ do
+    case res of
+      Ok x -> do
+        toHtml $ show x
+        br_ []
+      Error xs -> do
+        toHtml $ show xs
+        br_ []
+    html
 
 defaultLayout :: Html () -> TrasaT IO (Html ())
 defaultLayout children = do

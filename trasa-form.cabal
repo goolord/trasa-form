@@ -42,25 +42,26 @@ library
     , bytestring
   hs-source-dirs: src
   default-language: Haskell2010
--- executable test-server
---   ghc-options: -Wall
---   main-is: Main.hs
---   build-depends: 
---       base ^>=4.12.0.0
---     , bytestring
---     , lucid
---     , quantification
---     , ditto >= 0.4 && < 0.5
---     , ditto-lucid >= 0.4 && < 0.5
---     , text
---     , trasa == 0.4.*
---     , trasa-extra
---     , trasa-form
---     , trasa-server
---     , wai
---     , wai-extra == 3.0.27 
---     , mtl
---     , warp
---     , path-pieces
---   hs-source-dirs: app
---   default-language: Haskell2010
+executable test-server
+  ghc-options: -Wall
+  main-is: Main.hs
+  build-depends: 
+      base ^>=4.12.0.0
+    , bytestring
+    , ditto >= 0.4 && < 0.5
+    , ditto-lucid >= 0.4 && < 0.5
+    , http-api-data
+    , lucid
+    , mtl
+    , path-pieces
+    , quantification
+    , text
+    , trasa == 0.4.*
+    , trasa-extra
+    , trasa-form
+    , trasa-server
+    , wai
+    , wai-extra == 3.0.27 
+    , warp
+  hs-source-dirs: app
+  default-language: Haskell2010

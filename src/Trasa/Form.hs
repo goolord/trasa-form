@@ -4,20 +4,22 @@
   , TypeFamilies
   , MultiParamTypeClasses
   , GeneralizedNewtypeDeriving
+  , LambdaCase
   , StandaloneDeriving 
 #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Trasa.Form 
-  ( reform
-  , reformPost
-  , liftParser
-  , TrasaForm
-  , TrasaSimpleForm
+  ( FormData(..)
   , FormError(..)
-  , FormData(..)
+  , TrasaForm
+  , TrasaFormT
   , bodyFormData
+  , liftParser
+  , liftToForm
+  , reform
+  , reformPost
   )
   where
 
@@ -60,27 +62,16 @@ liftParser f q = case q of
 tshow :: Show a => a -> Text
 tshow = T.pack . show
 
-type TrasaSimpleForm a = Form (TrasaT IO) Text Text (Html ()) a
-type TrasaForm a = Form (TrasaT IO) QueryParam Text (Html ()) a
+type TrasaForm a = Form (TrasaFormT IO) QueryParam Text (Html ()) a
 
 reform :: (MonadIO m, Monoid view)  
   => ([(Text, Text)] -> view -> view) -- ^ wrap raw form html inside a <form> tag
   -> Text -- ^ form name prefix
-  -> Form (TrasaT m) QueryParam err view a  -- ^ the formlet
+  -> Form (TrasaFormT m) QueryParam err view a  -- ^ the formlet
   -> TrasaT m (Result err a, view)
 reform toForm prefix formlet = do 
-  reformSingle toForm' prefix formlet
-  where
-  toForm' hidden view = toForm (hidden) view
-
-reformSingle :: (MonadIO m, Monoid view)
-  => ([(Text, Text)] -> view -> view)
-  -> Text
-  -> Form (TrasaT m) QueryParam err view a
-  -> TrasaT m (Result err a, view)
-reformSingle toForm prefix formlet = do
-  (View viewf, res') <- runForm prefix formlet
-  res <- res'
+  (View viewf, res') <- flip runReaderT Get $ getTrasaFormT $ runForm prefix formlet
+  res <- flip runReaderT Get $ getTrasaFormT res'
   case res of
     Error errs -> pure (Error errs, toForm [] $ viewf errs)
     Ok (Proved _ unProved') -> pure (Ok unProved', toForm [] $ viewf [])
@@ -97,22 +88,11 @@ reformPost :: (MonadIO m, Monoid view)
   => ([(Text, Text)] -> view -> view) -- ^ wrap raw form html inside a <form> tag
   -> Text -- ^ form name prefix
   -> FormData a
-  -> Form (TrasaT m) QueryParam err view a  -- ^ the formlet
+  -> Form (TrasaFormT m) QueryParam err view a  -- ^ the formlet
   -> TrasaT m (Result err a, view)
-reformPost toForm prefix reqBody formlet = do 
-  reformSinglePost toForm' prefix reqBody formlet
-  where
-  toForm' hidden view = toForm (hidden) view
-
-reformSinglePost :: (MonadIO m, Monoid view)
-  => ([(Text, Text)] -> view -> view)
-  -> Text
-  -> FormData a
-  -> Form (TrasaT m) QueryParam err view a
-  -> TrasaT m (Result err a, view)
-reformSinglePost toForm prefix formData formlet = do
-  (View viewf, res') <- flip runReaderT formData $ getTrasaPostT $ runForm prefix $ mapFormMonad (TrasaPostT . lift) formlet
-  res <- flip runReaderT formData $ getTrasaPostT res'
+reformPost toForm prefix (FormData formData) formlet = do 
+  (View viewf, res') <- flip runReaderT (Post formData) $ getTrasaFormT $ runForm prefix formlet
+  res <- flip runReaderT (Post formData) $ getTrasaFormT res'
   case res of
     Error errs -> pure (Error errs, toForm [] $ viewf errs)
     Ok (Proved _ unProved') -> pure (Ok unProved', toForm [] $ viewf [])
@@ -126,18 +106,30 @@ bodyFormData = BodyCodec
   (HTTP.urlEncodeAsFormStable . getFormData)
   (fmap (FormData . HTTP.unForm) . HTTP.urlDecodeForm)
 
-newtype TrasaPostT formData m a = TrasaPostT 
-  { getTrasaPostT :: ReaderT (FormData formData) (TrasaT m) a }
+newtype TrasaFormT m a = TrasaFormT
+  { getTrasaFormT :: ReaderT FormType (TrasaT m) a }
   deriving (Monad, Applicative, Functor)
 
-deriving instance Monad m => MonadReader (FormData formData) (TrasaPostT formData m)
+instance MonadTrans (TrasaFormT) where
+  lift = TrasaFormT . lift . lift
 
-instance Monad m => Environment (TrasaPostT formData m) QueryParam where
-  environment formId = do
-    FormData urlEncoded <- ask
-    let val = HM.lookup (encodeFormId formId) urlEncoded
-    case val of
-      Nothing -> pure Missing
-      Just [] -> pure $ Found QueryParamFlag
-      Just [x] -> pure $ Found $ QueryParamSingle x
-      Just xs -> pure $ Found $ QueryParamList xs
+deriving instance Monad m => MonadReader FormType (TrasaFormT m)
+
+data FormType = Get | Post (HM.HashMap Text [Text])
+
+instance Monad m => Environment (TrasaFormT m) QueryParam where
+  environment formId = ask >>= \case
+    Post urlEncoded -> do
+      case HM.lookup (encodeFormId formId) urlEncoded of
+        Nothing -> pure Missing
+        Just [] -> pure $ Found QueryParamFlag
+        Just [x] -> pure $ Found $ QueryParamSingle x
+        Just xs -> pure $ Found $ QueryParamList xs
+    Get -> TrasaFormT $ lift $ do
+      QueryString queryString <- trasaQueryString <$> ask
+      case HM.lookup (tshow formId) queryString of
+        Nothing -> pure Missing
+        Just x -> pure (Found x)
+
+liftToForm :: Monad m => TrasaT m a -> TrasaFormT m a
+liftToForm = TrasaFormT . lift
