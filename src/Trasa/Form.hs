@@ -20,6 +20,7 @@ module Trasa.Form
   , liftToForm
   , reform
   , reformPost
+  , trasaFormView
   )
   where
 
@@ -133,3 +134,10 @@ instance Monad m => Environment (TrasaFormT m) QueryParam where
 
 liftToForm :: Monad m => TrasaT m a -> TrasaFormT m a
 liftToForm = TrasaFormT . lift
+
+trasaFormView :: Monad m
+  => Text
+  -> Form (TrasaFormT m) QueryParam err view a
+  -> TrasaT m view
+trasaFormView name form = flip runReaderT Get $ getTrasaFormT $ viewForm name form
+
