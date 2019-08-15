@@ -24,6 +24,7 @@ module Trasa.Form
   )
   where
 
+import Control.Applicative (Alternative(..))
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Text (Text)
@@ -109,7 +110,7 @@ bodyFormData = BodyCodec
 
 newtype TrasaFormT m a = TrasaFormT
   { getTrasaFormT :: ReaderT FormType (TrasaT m) a }
-  deriving (Monad, Applicative, Functor)
+  deriving (Monad, Applicative, Functor, Alternative)
 
 instance MonadTrans (TrasaFormT) where
   lift = TrasaFormT . lift . lift
