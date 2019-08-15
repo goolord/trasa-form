@@ -128,7 +128,7 @@ instance Monad m => Environment (TrasaFormT m) QueryParam where
         Just xs -> pure $ Found $ QueryParamList xs
     Get -> TrasaFormT $ lift $ do
       QueryString queryString <- trasaQueryString <$> ask
-      case HM.lookup (tshow formId) queryString of
+      case HM.lookup (encodeFormId formId) queryString of
         Nothing -> pure Missing
         Just x -> pure (Found x)
 
