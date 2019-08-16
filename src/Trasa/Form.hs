@@ -72,8 +72,7 @@ reform :: (MonadIO m, Monoid view)
   -> Form (TrasaFormT m) QueryParam err view a  -- ^ the formlet
   -> TrasaT m (Result err a, view)
 reform toForm prefix formlet = do 
-  (View viewf, res') <- flip runReaderT Get $ getTrasaFormT $ runForm prefix formlet
-  res <- flip runReaderT Get $ getTrasaFormT res'
+  (View viewf, res) <- flip runReaderT Get $ getTrasaFormT $ runForm prefix formlet
   case res of
     Error errs -> pure (Error errs, toForm [] $ viewf errs)
     Ok (Proved _ unProved') -> pure (Ok unProved', toForm [] $ viewf [])
@@ -93,8 +92,7 @@ reformPost :: (MonadIO m, Monoid view)
   -> Form (TrasaFormT m) QueryParam err view a  -- ^ the formlet
   -> TrasaT m (Result err a, view)
 reformPost toForm prefix (FormData formData) formlet = do 
-  (View viewf, res') <- flip runReaderT (Post formData) $ getTrasaFormT $ runForm prefix formlet
-  res <- flip runReaderT (Post formData) $ getTrasaFormT res'
+  (View viewf, res) <- flip runReaderT (Post formData) $ getTrasaFormT $ runForm prefix formlet
   case res of
     Error errs -> pure (Error errs, toForm [] $ viewf errs)
     Ok (Proved _ unProved') -> pure (Ok unProved', toForm [] $ viewf [])
