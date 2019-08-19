@@ -88,11 +88,11 @@ instance MonadIO m => Environment (TrasaT m) QueryParam where
 reformPost :: (MonadIO m, Monoid view)  
   => ([(Text, Text)] -> view -> view) -- ^ wrap raw form html inside a <form> tag
   -> Text -- ^ form name prefix
-  -> FormData a
+  -> Maybe (FormData a)
   -> Form (TrasaFormT m) QueryParam err view a  -- ^ the formlet
   -> TrasaT m (Result err a, view)
-reformPost toForm prefix (FormData formData) formlet = do 
-  (View viewf, res) <- flip runReaderT (Post formData) $ getTrasaFormT $ runForm prefix formlet
+reformPost toForm prefix formData formlet = do 
+  (View viewf, res) <- flip runReaderT (Post $ getFormData <$> formData) $ getTrasaFormT $ runForm prefix formlet
   case res of
     Error errs -> pure (Error errs, toForm [] $ viewf errs)
     Ok (Proved _ unProved') -> pure (Ok unProved', toForm [] $ viewf [])
@@ -115,16 +115,17 @@ instance MonadTrans (TrasaFormT) where
 
 deriving instance Monad m => MonadReader FormType (TrasaFormT m)
 
-data FormType = Get | Post (HM.HashMap Text [Text])
+data FormType = Get | Post (Maybe (HM.HashMap Text [Text]))
 
 instance Monad m => Environment (TrasaFormT m) QueryParam where
   environment formId = ask >>= \case
-    Post urlEncoded -> do
+    Post (Just urlEncoded) -> do
       case HM.lookup (encodeFormId formId) urlEncoded of
         Nothing -> pure Missing
         Just [] -> pure $ Found QueryParamFlag
         Just [x] -> pure $ Found $ QueryParamSingle x
         Just xs -> pure $ Found $ QueryParamList xs
+    Post Nothing -> pure Default
     Get -> TrasaFormT $ lift $ do
       QueryString queryString <- trasaQueryString <$> ask
       case HM.lookup (encodeFormId formId) queryString of
