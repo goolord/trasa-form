@@ -13,8 +13,8 @@
 module Trasa.Form 
   ( FormData(..)
   , FormError(..)
+  , TrasaFormT(..)
   , TrasaForm
-  , TrasaFormT
   , bodyFormData
   , liftParser
   , liftToForm
