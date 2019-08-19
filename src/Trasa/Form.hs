@@ -100,7 +100,7 @@ reformPost toForm prefix formData formlet = do
 newtype FormData a = FormData { getFormData :: HM.HashMap Text [Text] }
   deriving (Monoid, Semigroup, Eq, Ord, Show)
 
-bodyFormData :: HTTP.ToForm a => BodyCodec (FormData a)
+bodyFormData :: BodyCodec (FormData a)
 bodyFormData = BodyCodec
   (pure "application/x-www-form-urlencoded")
   (HTTP.urlEncodeAsFormStable . getFormData)
