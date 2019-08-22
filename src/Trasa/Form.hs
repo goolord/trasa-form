@@ -61,6 +61,10 @@ data TrasaFormError = TrasaFormError
   , trasaFormErrorText :: Text
   }
 
+instance ToHtml TrasaFormError where
+  toHtml = toHtml . trasaFormErrorText
+  toHtmlRaw = toHtmlRaw . trasaFormErrorText
+
 textError :: Text -> TrasaFormError
 textError = TrasaFormError Nothing
 
