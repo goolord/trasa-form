@@ -75,7 +75,7 @@ liftParser f q = case q of
 tshow :: Show a => a -> Text
 tshow = T.pack . show
 
-type TrasaForm a = Form (TrasaFormT IO) QueryParam Text (Html ()) a
+type TrasaForm a = Form (TrasaFormT IO) QueryParam TrasaFormError (Html ()) a
 
 reform :: (MonadIO m, Monoid view)  
   => ([(Text, Text)] -> view -> view) -- ^ wrap raw form html inside a <form> tag
