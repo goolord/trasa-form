@@ -1,11 +1,11 @@
 packages: ./
 
--- source-repository-package 
---   type: git 
---   location: https://github.com/goolord/ditto
---   tag: ec32159d5bebdc0127be10f684740fee93c4bdc3
--- 
--- source-repository-package 
---   type: git 
---   location: https://github.com/goolord/ditto-lucid
---   tag: 04b2872b68d59c1cf26c1cc5eb9fec135136746e
+source-repository-package 
+  type: git 
+  location: https://github.com/goolord/ditto
+  tag: 55d32a5c0098e270360a7c5c5e1489269f87e08c
+
+source-repository-package 
+  type: git 
+  location: https://github.com/goolord/ditto-lucid
+  tag: 1ccf2d3ebbb8d18d11591fd1a63eab1bb6432166

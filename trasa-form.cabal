@@ -1,6 +1,6 @@
 cabal-version: 2.0
 name: trasa-form
-version: 0.3.2.0
+version: 0.4
 synopsis: generate forms using lucid, ditto and trasa
 description: Formlets library for trasa using ditto as its backend.
              Although trasa already has machinery for creating
@@ -33,8 +33,8 @@ library
     , lucid
     , mtl
     , quantification
-    , ditto >= 0.3.1 && < 0.4
-    , ditto-lucid >= 0.3.1 && < 0.4
+    , ditto >= 0.4 && < 0.5
+    , ditto-lucid >= 0.4 && < 0.5
     , text
     , trasa
     , trasa-server >= 0.5.3
@@ -48,10 +48,13 @@ library
 --   build-depends: 
 --       base ^>=4.12.0.0
 --     , bytestring
+--     , ditto >= 0.4 && < 0.5
+--     , ditto-lucid >= 0.4 && < 0.5
+--     , http-api-data
 --     , lucid
+--     , mtl
+--     , path-pieces
 --     , quantification
---     , ditto >= 0.3.1 && < 0.4
---     , ditto-lucid >= 0.3.1 && < 0.4
 --     , text
 --     , trasa == 0.4.*
 --     , trasa-extra
@@ -59,7 +62,6 @@ library
 --     , trasa-server
 --     , wai
 --     , wai-extra == 3.0.27 
---     , mtl
 --     , warp
 --   hs-source-dirs: app
 --   default-language: Haskell2010

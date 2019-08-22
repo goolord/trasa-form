@@ -1,4 +1,3 @@
-{-# language ApplicativeDo #-}
 {-# language DataKinds #-}
 {-# language GADTs #-}
 {-# language KindSignatures #-}
@@ -18,8 +17,12 @@ import Data.Functor.Identity
 import Data.Kind (Type)
 import Data.Text (Text)
 import Ditto (Result(..), FormInput(..), CommonFormError(..))
+import Ditto.Generalized.Named (withErrors)
+import Control.Monad (void)
+import Data.List.NonEmpty (NonEmpty(..))
 -- import Ditto.Lucid
 import Ditto.Lucid.Named
+import qualified Data.Foldable as F
 import Lucid
 import Network.Wai (Application)
 import Network.Wai.Handler.Warp (run)
@@ -29,6 +32,10 @@ import Trasa.Extra
 import Trasa.Form
 import Trasa.Form.Lucid
 import Trasa.Server
+import Web.PathPieces
+import Web.FormUrlEncoded (ToForm(..))
+import qualified Web.FormUrlEncoded as HTTP
+import qualified GHC.Exts as Exts
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
@@ -45,8 +52,16 @@ readInt input = case (TR.signed TR.decimal) input of
   Left err -> Left $ T.pack err
   Right (i, _) -> Right i
 
-data Foo = Foo Int Bool Int
+data Foo = Foo Int Bool Char Text
   deriving Show
+
+instance ToForm Foo where 
+  toForm (Foo int' bool char text') = HTTP.Form $ Exts.fromList
+    [ ("int",  pure $ toPathPiece int')
+    , ("bool", pure $ toPathPiece bool)
+    , ("char", pure $ toPathPiece char)
+    , ("text", pure $ toPathPiece text')
+    ]
 
 -- Our route data type. We define this ourselves.
 data Route :: [Type] -> [Param] -> Bodiedness -> Type -> Type where
@@ -63,7 +78,7 @@ data Route :: [Type] -> [Param] -> Bodiedness -> Type -> Type where
   FormTestPost :: Route
     '[]
     '[]
-    ('Body B.ByteString)
+    ('Body (FormData Foo)) 
     (Html ())
 
 bodyAny :: BodyCodec B.ByteString
@@ -112,7 +127,7 @@ meta route = case route of
   FormTestPost -> Meta
     (match "test" ./ match "post" ./ end)
     (qend)
-    (body (one bodyAny))
+    (body (one bodyFormData))
     (resp (one bodyHtml))
     Method.post
 
@@ -142,30 +157,27 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
   QueryArguments '[] r = r
   QueryArguments (q ': qs) r = ParamBase q -> QueryArguments qs r
 
--- formArgs :: Monad f => Rec Parameter qrys -> QueryArguments qrys (f (Rec Parameter qrys))
--- formArgs queries args = do
---   pure RecNil
-
 formFoo :: TrasaForm Foo
 formFoo = do
-  label "Int Field 1" "int1"
-  int1 <- inputInt (liftParser readInt) "int1" 0
-  label "Bool Field 1" "bool1"
-  bool1 <- inputYesNo "bool1"
-  label "Int Field 2" "in2" 
-  int2 <- inputInt (liftParser readInt) "int2" 0
-  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
-  pure $ Foo int1 bool1 int2
+  label "Int Field" "int"
+  int' <- withErrors' $ inputInt (liftParser readInt) "int" 0
+  label "Bool Field" "bool"
+  bool <- withErrors' $ inputYesNo "bool"
+  label "Char Field" "char" 
+  char <- withErrors' $ inputText (liftParser readChar) "char" 'a'
+  label "Text Field" "text"
+  text' <- withErrors' $ inputText (liftParser Right) "text" "empty"
+  void $ buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
+  pure $ Foo int' bool char text'
 
--- childErrorList ++> ( Foo 
-  -- <$> label "Int Field 1" "int1" 
-      -- ++> setAttr [class_ "input"] (inputInt readInt "int1" 0)
-  -- <*> label "Bool Field 1" "bool1"
-      -- ++> inputYesNo "bool1"
-  -- <*> label "Int Field 2" "in2" 
-      -- ++> inputInt readInt "int2" 0
-  -- <*  buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
-  -- )
+-- formFoo :: TrasaForm Foo
+-- formFoo = Foo
+  -- <$> inputInt (liftParser readInt) "int" 0
+  -- <*> inputYesNo "bool"
+  -- <*> (withErrors' $ inputText (liftParser readChar) "char" 'a')
+  -- <*>(  ( inputText (liftParser Right) "text" "empty" )
+     -- <* ( void $ buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text) )
+     -- )
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
 prepare = prepareWith meta
@@ -175,7 +187,7 @@ instance IsRoute Route where
 
 formTest :: TrasaT IO (Html ())
 formTest = do
-  (res, html) <- queryParamReformGET (encodeRoute $ conceal (prepare FormTest)) formFoo
+  (res, html) <- formPOST (encodeRoute $ conceal (prepare FormTestPost mempty)) mempty formFoo
   defaultLayout $ do
     case res of
       Ok x -> do
@@ -186,9 +198,18 @@ formTest = do
         br_ []
     html
 
-formTestPost :: B.ByteString -> TrasaT IO (Html ())
-formTestPost _ = do
-  pure $ pure ()
+formTestPost :: FormData Foo -> TrasaT IO (Html ())
+formTestPost fd = do
+  (res, html) <- formPOST (encodeRoute $ conceal (prepare FormTestPost mempty)) fd formFoo
+  defaultLayout $ do
+    case res of
+      Ok x -> do
+        toHtml $ show x
+        br_ []
+      Error xs -> do
+        toHtml $ show xs
+        br_ []
+    html
 
 defaultLayout :: Html () -> TrasaT IO (Html ())
 defaultLayout children = do
@@ -216,18 +237,38 @@ application = serveWith
 main :: IO ()
 main = run 8080 (logStdoutDev application)
 
-inputYesNo :: String -> TrasaForm Bool
+inputYesNo :: Text -> TrasaForm Bool
 inputYesNo s = select s
-  [ (False, "No")
-  , (True, "Yes")
-  ]
+  ( (False, "No") :|
+  [ (True, "Yes")
+  ] )
+  (liftParser $ note "Failed to decode Bool" . fromPathPiece)
   (==True)
-  -- mapView 
-  -- (\x -> label_ [for_ (T.pack s)] $ x *> "Enabled")
-  -- (inputCheckbox False s)
 
+note :: err -> Maybe a -> Either err a
+note e = maybe (Left e) Right
+
+readChar :: Text -> Either Text Char
+readChar input
+  | len > 1 = Left "Too many characters"
+  | len < 1 = Left "empty"
+  | otherwise = Right $ T.head input
+  where 
+  len = T.length input
 
 instance FormInput Text where
   type FileType Text = ()
   getInputStrings = pure . T.unpack
   getInputFile _ = Left $ commonFormError $ (NoFileFound ("No support for file uploads") :: CommonFormError Text)
+
+instance PathPiece Char where
+  toPathPiece = T.singleton
+  fromPathPiece = either (const Nothing) Just . readChar
+
+withErrors' :: TrasaForm a -> TrasaForm a
+withErrors' = withErrors renderErrors
+
+renderErrors :: Html () -> [Text] -> Html ()
+renderErrors formlet xs = do
+  formlet
+  F.for_ xs $ p_ [] . toHtml

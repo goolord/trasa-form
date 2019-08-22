@@ -6,33 +6,22 @@ import Control.Monad.Except
 import Data.Text (Text)
 import Ditto.Core hiding (view)
 import Ditto.Lucid
-import Ditto.Result
+import Ditto.Types
 import Lucid
 import Trasa.Form
 import Trasa.Server
 import Trasa.Url
 
-queryParamReformGET :: (MonadIO m, Applicative f) 
+formGET :: (MonadIO m, Applicative f) 
   => Text
-  -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
+  -> Form (TrasaFormT m) QueryParam err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
-queryParamReformGET action = reformQP (formGenGET' action) "reform"
+formGET action = reform (formGenGET action) "ditto"
 
-simpleReformGET :: (MonadIO m, Applicative f) 
+formPOST :: (MonadIO m, Applicative f) 
   => Text
-  -> Form (TrasaT m) Text err (HtmlT f ()) b 
+  -> Maybe (FormData b)
+  -> Form (TrasaFormT m) QueryParam err (HtmlT f ()) b 
   -> TrasaT m (Result err b, HtmlT f ())
-simpleReformGET action form = reform (formGenGET' action) "reform" form
+formPOST action formData = reformPost (formGenPOST action) "ditto" formData
 
-queryParamReformPOST :: (MonadIO m, Applicative f) 
-  => Text
-  -> FormData b
-  -> Form (TrasaT m) QueryParam err (HtmlT f ()) b 
-  -> TrasaT m (Result err b, HtmlT f ())
-queryParamReformPOST action reqBody form = reformPost (formGenPOST' action) "reform" reqBody form
-
-formGenGET' :: Applicative f => Text -> [(Text, Text)] -> HtmlT f b -> HtmlT f b
-formGenGET' url = formGenGET url
-
-formGenPOST' :: Applicative f => Text -> [(Text, Text)] -> HtmlT f b -> HtmlT f b
-formGenPOST' url = formGenPOST url
