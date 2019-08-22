@@ -29,6 +29,7 @@ module Trasa.Form
 import Control.Applicative (Alternative(..))
 import Control.Monad.Except
 import Control.Monad.Reader
+import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Bifunctor
 import Ditto.Backend
@@ -64,6 +65,9 @@ data TrasaFormError = TrasaFormError
 instance ToHtml TrasaFormError where
   toHtml = toHtml . trasaFormErrorText
   toHtmlRaw = toHtmlRaw . trasaFormErrorText
+
+instance IsString TrasaFormError where
+  fromString = TrasaFormError Nothing . fromString
 
 textError :: Text -> TrasaFormError
 textError = TrasaFormError Nothing
