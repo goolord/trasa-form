@@ -60,7 +60,9 @@ instance FormInput QueryParam where
 data TrasaFormError = TrasaFormError
   { trasaFormErrorType :: Maybe (CommonFormError QueryParam)
   , trasaFormErrorText :: Text
-  }
+  } deriving Show
+
+deriving instance Show QueryParam
 
 instance ToHtml TrasaFormError where
   toHtml = toHtml . trasaFormErrorText
