@@ -14,6 +14,7 @@ module Trasa.Form
   ( FormData(..)
   , FormError(..)
   , TrasaFormT(..)
+  , FormType(..)
   , TrasaForm
   , TrasaFormError(..)
   , bodyFormData
@@ -57,6 +58,7 @@ instance FormInput QueryParam where
   getInputStrings (QueryParamFlag) = []
   getInputFile _ = Left $ commonFormError $ (NoFileFound (QueryParamSingle "No support for file uploads") :: CommonFormError QueryParam)
 
+-- | @trasa-form@'s form error type: may have a @CommonFormError@, will have an error message
 data TrasaFormError = TrasaFormError
   { trasaFormErrorType :: Maybe (CommonFormError QueryParam)
   , trasaFormErrorText :: Text
@@ -71,9 +73,11 @@ instance ToHtml TrasaFormError where
 instance IsString TrasaFormError where
   fromString = TrasaFormError Nothing . fromString
 
+-- | convert @Text@ to a @TrasaFormError@
 textError :: Text -> TrasaFormError
 textError = TrasaFormError Nothing
 
+-- | lift a function which parses @Text@ into a function which parses a @QueryParam@
 liftParser :: (Text -> Either Text a) -> (QueryParam -> Either TrasaFormError a)
 liftParser f q = case q of
   QueryParamSingle x -> first textError $ f x
@@ -85,8 +89,10 @@ liftParser f q = case q of
 tshow :: Show a => a -> Text
 tshow = T.pack . show
 
+-- | a type alias for the most common type of form using @trasa-form@
 type TrasaForm a = Form (TrasaFormT IO) QueryParam TrasaFormError (Html ()) a
 
+-- | run a @Form@ with the @GET@ method
 reform :: (MonadIO m, Monoid view)  
   => ([(Text, Text)] -> view -> view) -- ^ wrap raw form html inside a <form> tag
   -> Text -- ^ form name prefix
@@ -106,6 +112,7 @@ instance MonadIO m => Environment (TrasaT m) QueryParam where
       Nothing -> pure Missing
       Just x -> pure (Found x)
 
+-- | run a @Form@ with the @POST@ method
 reformPost :: (MonadIO m, Monoid view)  
   => ([(Text, Text)] -> view -> view) -- ^ wrap raw form html inside a <form> tag
   -> Text -- ^ form name prefix
@@ -121,12 +128,16 @@ reformPost toForm prefix formData formlet = do
 newtype FormData a = FormData { getFormData :: HM.HashMap Text [Text] }
   deriving (Monoid, Semigroup, Eq, Ord, Show)
 
+-- | this is a @BodyCodec@, the intended use is to get the request body
+-- without using @wai@ black magic to pass to @POST@ forms
 bodyFormData :: BodyCodec (FormData a)
 bodyFormData = BodyCodec
   (pure "application/x-www-form-urlencoded")
   (HTTP.urlEncodeAsFormStable . getFormData)
   (fmap (FormData . HTTP.unForm) . HTTP.urlDecodeForm)
 
+-- | a newtype over TrasaT which allows it to have
+-- different environments for @GET@ and @POST@ requests
 newtype TrasaFormT m a = TrasaFormT
   { getTrasaFormT :: ReaderT FormType (TrasaT m) a }
   deriving (Monad, Applicative, Functor, Alternative)
@@ -136,6 +147,7 @@ instance MonadTrans (TrasaFormT) where
 
 deriving instance Monad m => MonadReader FormType (TrasaFormT m)
 
+-- | a GET request, or a @POST@ request which may hav the untyped @FormData@
 data FormType = Get | Post (Maybe (HM.HashMap Text [Text]))
 
 instance Monad m => Environment (TrasaFormT m) QueryParam where
@@ -153,9 +165,11 @@ instance Monad m => Environment (TrasaFormT m) QueryParam where
         Nothing -> pure Missing
         Just x -> pure (Found x)
 
+-- | lift a TrasaT to a TrasaFormT
 liftToForm :: Monad m => TrasaT m a -> TrasaFormT m a
 liftToForm = TrasaFormT . lift
 
+-- | @viewForm@ helper function
 trasaFormView :: Monad m
   => Text
   -> Form (TrasaFormT m) QueryParam err view a
