@@ -15,12 +15,14 @@ module Trasa.Form
   , FormError(..)
   , TrasaFormT(..)
   , TrasaForm
+  , TrasaFormError(..)
   , bodyFormData
   , liftParser
   , liftToForm
   , reform
   , reformPost
   , trasaFormView
+  , textError
   )
   where
 
@@ -28,6 +30,7 @@ import Control.Applicative (Alternative(..))
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Text (Text)
+import Data.Bifunctor
 import Ditto.Backend
 import Ditto.Core hiding (view)
 import Ditto.Types
@@ -39,8 +42,8 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Web.FormUrlEncoded as HTTP
 
-instance FormError QueryParam Text where
-  commonFormError = commonFormErrorText encQP
+instance FormError QueryParam TrasaFormError where
+  commonFormError e = TrasaFormError (Just e) (commonFormErrorText encQP e)
     where
     encQP QueryParamFlag = "<flag>"
     encQP (QueryParamSingle x) = x
@@ -53,13 +56,21 @@ instance FormInput QueryParam where
   getInputStrings (QueryParamFlag) = []
   getInputFile _ = Left $ commonFormError $ (NoFileFound (QueryParamSingle "No support for file uploads") :: CommonFormError QueryParam)
 
-liftParser :: (Text -> Either Text a) -> (QueryParam -> Either Text a)
+data TrasaFormError = TrasaFormError
+  { trasaFormErrorType :: Maybe (CommonFormError QueryParam)
+  , trasaFormErrorText :: Text
+  }
+
+textError :: Text -> TrasaFormError
+textError = TrasaFormError Nothing
+
+liftParser :: (Text -> Either Text a) -> (QueryParam -> Either TrasaFormError a)
 liftParser f q = case q of
-  QueryParamSingle x -> f x
-  QueryParamList [x] -> f x
-  QueryParamFlag -> Left "Unexpected query flag"
-  QueryParamList [] -> Left "Unexpect empty query list"
-  QueryParamList (_:_:_) -> Left "Unexpected query string list"
+  QueryParamSingle x -> first textError $ f x
+  QueryParamList [x] -> first textError $ f x
+  QueryParamFlag -> Left $ textError "Unexpected query flag"
+  QueryParamList [] -> Left $ textError "Unexpect empty query list"
+  QueryParamList (_:_:_) -> Left $ textError "Unexpected query string list"
 
 tshow :: Show a => a -> Text
 tshow = T.pack . show
