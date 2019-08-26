@@ -12,17 +12,15 @@
 
 module Main where
 
+import Control.Monad (void)
 import Data.ByteString.Lazy (ByteString)
 import Data.Functor.Identity
 import Data.Kind (Type)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Ditto (Result(..), FormInput(..), CommonFormError(..))
-import Ditto.Generalized.Named (withErrors)
-import Control.Monad (void)
-import Data.List.NonEmpty (NonEmpty(..))
--- import Ditto.Lucid
+import Ditto.Generalized.Named (withChildErrors)
 import Ditto.Lucid.Named
-import qualified Data.Foldable as F
 import Lucid
 import Network.Wai (Application)
 import Network.Wai.Handler.Warp (run)
@@ -32,17 +30,18 @@ import Trasa.Extra
 import Trasa.Form
 import Trasa.Form.Lucid
 import Trasa.Server
-import Web.PathPieces
 import Web.FormUrlEncoded (ToForm(..))
-import qualified Web.FormUrlEncoded as HTTP
-import qualified GHC.Exts as Exts
+import Web.PathPieces
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.Foldable as F
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.Read as TR
+import qualified GHC.Exts as Exts
 import qualified Text.Read
 import qualified Trasa.Method as Method
+import qualified Web.FormUrlEncoded as HTTP
 
 tshow :: Show a => a -> Text
 tshow = T.pack . show
@@ -160,24 +159,15 @@ type family QueryArguments (querys :: [Param]) (result :: Type) :: Type where
 formFoo :: TrasaForm Foo
 formFoo = do
   label "Int Field" "int"
-  int' <- withErrors' $ inputInt (liftParser readInt) "int" 0
+  int' <- withCErrors $ inputInt (liftParser readInt) "int" 0
   label "Bool Field" "bool"
-  bool <- withErrors' $ inputYesNo "bool"
+  bool <- withCErrors $ inputYesNo "bool"
   label "Char Field" "char" 
-  char <- withErrors' $ inputText (liftParser readChar) "char" 'a'
+  char <- withCErrors $ inputText (liftParser readChar) "char" 'a'
   label "Text Field" "text"
-  text' <- withErrors' $ inputText (liftParser Right) "text" "empty"
+  text' <- withCErrors $ inputText (liftParser Right) "text" "empty"
   void $ buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text)
   pure $ Foo int' bool char text'
-
--- formFoo :: TrasaForm Foo
--- formFoo = Foo
-  -- <$> inputInt (liftParser readInt) "int" 0
-  -- <*> inputYesNo "bool"
-  -- <*> (withErrors' $ inputText (liftParser readChar) "char" 'a')
-  -- <*>(  ( inputText (liftParser Right) "text" "empty" )
-     -- <* ( void $ buttonSubmit (const (Right T.empty)) "" "" ("Submit" :: Text) )
-     -- )
 
 prepare :: Route captures query request response -> Arguments captures query request (Prepared Route response)
 prepare = prepareWith meta
@@ -200,7 +190,7 @@ formTest = do
 
 formTestPost :: FormData Foo -> TrasaT IO (Html ())
 formTestPost fd = do
-  (res, html) <- formPOST (encodeRoute $ conceal (prepare FormTestPost mempty)) fd formFoo
+  (res, html) <- formPOST (encodeRoute $ conceal (prepare FormTestPost mempty)) (Just fd) formFoo
   defaultLayout $ do
     case res of
       Ok x -> do
@@ -265,10 +255,11 @@ instance PathPiece Char where
   toPathPiece = T.singleton
   fromPathPiece = either (const Nothing) Just . readChar
 
-withErrors' :: TrasaForm a -> TrasaForm a
-withErrors' = withErrors renderErrors
+withCErrors :: TrasaForm a -> TrasaForm a
+withCErrors = withChildErrors renderErrors
 
-renderErrors :: Html () -> [Text] -> Html ()
+renderErrors :: Html () -> [TrasaFormError] -> Html ()
 renderErrors formlet xs = do
   formlet
   F.for_ xs $ p_ [] . toHtml
+

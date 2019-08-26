@@ -6,6 +6,18 @@
   , GeneralizedNewtypeDeriving
   , LambdaCase
   , StandaloneDeriving 
+  , RankNTypes
+  , OverloadedStrings
+  , LambdaCase
+  , DataKinds
+  , PolyKinds
+  , GADTs
+  , TypeOperators
+  , TypeFamilies
+  , RankNTypes
+  , ScopedTypeVariables
+  , DeriveFunctor
+  , GeneralizedNewtypeDeriving
 #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -30,6 +42,7 @@ module Trasa.Form
 import Control.Applicative (Alternative(..))
 import Control.Monad.Except
 import Control.Monad.Reader
+-- import Data.Functor.Identity
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Bifunctor
@@ -147,8 +160,11 @@ instance MonadTrans (TrasaFormT) where
 
 deriving instance Monad m => MonadReader FormType (TrasaFormT m)
 
--- | a GET request, or a @POST@ request which may hav the untyped @FormData@
-data FormType = Get | Post (Maybe (HM.HashMap Text [Text]))
+-- | No environment, a GET request, or a @POST@ request which may hav the untyped @FormData@
+data FormType 
+  = None
+  | Get 
+  | Post (Maybe (HM.HashMap Text [Text]))
 
 instance Monad m => Environment (TrasaFormT m) QueryParam where
   environment formId = ask >>= \case
@@ -164,6 +180,7 @@ instance Monad m => Environment (TrasaFormT m) QueryParam where
       case HM.lookup (encodeFormId formId) queryString of
         Nothing -> pure Missing
         Just x -> pure (Found x)
+    None -> pure Default
 
 -- | lift a TrasaT to a TrasaFormT
 liftToForm :: Monad m => TrasaT m a -> TrasaFormT m a
@@ -174,5 +191,5 @@ trasaFormView :: Monad m
   => Text
   -> Form (TrasaFormT m) QueryParam err view a
   -> TrasaT m view
-trasaFormView name form = flip runReaderT Get $ getTrasaFormT $ viewForm name form
+trasaFormView name form = flip runReaderT None $ getTrasaFormT $ viewForm name form
 
