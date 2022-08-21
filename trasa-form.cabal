@@ -1,6 +1,6 @@
 cabal-version: 2.0
 name: trasa-form
-version: 0.4
+version: 0.4.1
 synopsis: generate forms using lucid, ditto and trasa
 description: Formlets library for trasa using ditto as its backend.
              Although trasa already has machinery for creating
@@ -25,7 +25,7 @@ library
   -- other-modules:
   -- other-extensions:
   ghc-options: -Wall
-  build-depends: 
+  build-depends:
       base < 5
     , http-api-data
     , cookie
@@ -36,8 +36,8 @@ library
     , ditto >= 0.4 && < 0.5
     , ditto-lucid >= 0.4 && < 0.5
     , text
-    , trasa
-    , trasa-server >= 0.5.3
+    , trasa >= 0.4.1
+    , trasa-server >= 0.5.4
     , unordered-containers
     , bytestring
   hs-source-dirs: src
